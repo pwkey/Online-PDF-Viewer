@@ -1,0 +1,1235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASI Course Viewer — Proof of Concept</title>
+
+<!-- PDF.js from CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<!-- StPageFlip from CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/page-flip/2.0.7/js/page-flip.browser.js"></script>
+
+<style>
+  /* ============================================
+     CSS VARIABLES & RESET
+     ============================================ */
+  :root {
+    --asi-navy: #1a2744;
+    --asi-blue: #2d5f8a;
+    --asi-accent: #3498db;
+    --asi-light: #eaf2f8;
+    --asi-dark: #0d1b2a;
+    --toolbar-h: 52px;
+    --radius: 6px;
+    --shadow: 0 2px 12px rgba(0,0,0,0.25);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--asi-dark);
+    color: #e0e8f0;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* ============================================
+     TOOLBAR
+     ============================================ */
+  .toolbar {
+    height: var(--toolbar-h);
+    background: var(--asi-navy);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    gap: 4px;
+    z-index: 100;
+    flex-shrink: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .toolbar::-webkit-scrollbar { height: 0; }
+
+  .toolbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-right: 16px;
+    padding-right: 16px;
+    border-right: 1px solid rgba(255,255,255,0.12);
+  }
+
+  .toolbar-brand .logo {
+    width: 28px; height: 28px;
+    background: var(--asi-accent);
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+    flex-shrink: 0;
+  }
+
+  .toolbar-brand span {
+    font-weight: 600;
+    font-size: 14px;
+    color: #c8daea;
+    white-space: nowrap;
+  }
+
+  .toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .toolbar-group + .toolbar-group {
+    margin-left: 4px;
+    padding-left: 8px;
+    border-left: 1px solid rgba(255,255,255,0.08);
+  }
+
+  .toolbar-spacer { flex: 1; }
+
+  .tb-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    color: #b0c4d8;
+    width: 36px; height: 36px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    font-size: 16px;
+    position: relative;
+  }
+
+  .tb-btn:hover {
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    border-color: rgba(255,255,255,0.1);
+  }
+
+  .tb-btn.active {
+    background: var(--asi-accent);
+    color: #fff;
+    border-color: transparent;
+  }
+
+  .tb-btn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  .page-nav {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #8ea8c2;
+  }
+
+  .page-nav input {
+    width: 42px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 4px;
+    color: #e0e8f0;
+    text-align: center;
+    padding: 4px 2px;
+    font-size: 13px;
+    outline: none;
+  }
+
+  .page-nav input:focus {
+    border-color: var(--asi-accent);
+    box-shadow: 0 0 0 2px rgba(52,152,219,0.25);
+  }
+
+  .tb-label {
+    font-size: 11px;
+    color: #6888a5;
+    padding: 0 4px;
+    white-space: nowrap;
+  }
+
+  /* Tooltip */
+  .tb-btn[data-tip]::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #0d1b2a;
+    color: #b0c4d8;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s;
+    z-index: 200;
+  }
+  .tb-btn[data-tip]:hover::after { opacity: 1; }
+
+  /* ============================================
+     MAIN LAYOUT
+     ============================================ */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ============================================
+     THUMBNAIL STRIP (bottom for landscape, side for portrait)
+     ============================================ */
+  .thumb-strip {
+    height: 110px;
+    background: rgba(13,27,42,0.95);
+    border-top: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    transition: height 0.25s ease;
+    z-index: 50;
+    overflow: hidden;
+  }
+
+  .thumb-strip.collapsed {
+    height: 0;
+  }
+
+  .thumb-scroll {
+    flex: 1;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 6px 10px;
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  .thumb-scroll::-webkit-scrollbar { height: 5px; }
+  .thumb-scroll::-webkit-scrollbar-track { background: transparent; }
+  .thumb-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+
+  .thumb-item {
+    cursor: pointer;
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 2px solid transparent;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    position: relative;
+    flex-shrink: 0;
+    height: 100%;
+  }
+
+  .thumb-item:hover { border-color: rgba(52,152,219,0.4); }
+  .thumb-item.active { border-color: var(--asi-accent); box-shadow: 0 0 0 2px rgba(52,152,219,0.2); }
+
+  .thumb-item canvas {
+    display: block;
+    height: 100%;
+    width: auto;
+  }
+
+  .thumb-label {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0,0,0,0.6);
+    color: #c8daea;
+    font-size: 9px;
+    text-align: center;
+    padding: 1px 0;
+    backdrop-filter: blur(4px);
+  }
+
+  /* ============================================
+     VIEWER AREA
+     ============================================ */
+  .viewer-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(ellipse at center, rgba(45,95,138,0.06) 0%, transparent 70%),
+      linear-gradient(180deg, #0d1b2a 0%, #13243a 100%);
+  }
+
+  /* Page flip container */
+  #flipbook-container {
+    position: relative;
+    cursor: default;
+  }
+
+  /* StPageFlip overrides */
+  .stf__wrapper { box-shadow: var(--shadow) !important; }
+
+  .page-canvas-wrapper {
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .page-canvas-wrapper canvas {
+    display: block;
+  }
+
+  /* ============================================
+     FLIP HINT ARROWS
+     ============================================ */
+  .flip-hint {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 44px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 20;
+    opacity: 0;
+    transition: opacity 0.25s;
+    background: rgba(0,0,0,0.25);
+    border-radius: var(--radius);
+    backdrop-filter: blur(4px);
+  }
+
+  .viewer-area:hover .flip-hint { opacity: 0.6; }
+  .flip-hint:hover { opacity: 1 !important; }
+
+  .flip-hint svg { width: 24px; height: 24px; stroke: #fff; fill: none; stroke-width: 2; }
+
+  .flip-hint.prev { left: 12px; }
+  .flip-hint.next { right: 12px; }
+
+  /* ============================================
+     STATUS BAR
+     ============================================ */
+  .status-bar {
+    height: 28px;
+    background: rgba(13,27,42,0.9);
+    border-top: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    font-size: 11px;
+    color: #5a7a94;
+    flex-shrink: 0;
+  }
+
+  .status-bar .watermark-badge {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: #3d7a3d;
+    font-size: 10px;
+  }
+
+  .status-bar .watermark-badge::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    background: #4caf50;
+    border-radius: 50%;
+  }
+
+  /* ============================================
+     LOADING OVERLAY
+     ============================================ */
+  .loading-overlay {
+    position: absolute;
+    inset: 0;
+    background: var(--asi-dark);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 500;
+    transition: opacity 0.4s ease;
+  }
+
+  .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+
+  .loading-spinner {
+    width: 40px; height: 40px;
+    border: 3px solid rgba(52,152,219,0.15);
+    border-top-color: var(--asi-accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 16px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading-text { color: #5a7a94; font-size: 13px; }
+  .loading-progress { color: #3d6a8f; font-size: 11px; margin-top: 6px; }
+
+  /* ============================================
+     CONTEXT MENU BLOCKER
+     ============================================ */
+  .viewer-area { -webkit-touch-callout: none; }
+
+  /* ============================================
+     VIEW MODE SWITCHER
+     ============================================ */
+  .view-mode-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #5a7a94;
+    padding: 0 4px;
+  }
+
+  /* ============================================
+     SCROLL MODE
+     ============================================ */
+  .scroll-container {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 24px 16px;
+    width: 100%;
+  }
+
+  .scroll-container::-webkit-scrollbar { width: 8px; }
+  .scroll-container::-webkit-scrollbar-track { background: transparent; }
+  .scroll-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+
+  .scroll-page {
+    box-shadow: var(--shadow);
+    border-radius: 2px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .scroll-page canvas { display: block; }
+
+  /* ============================================
+     PRINT STYLES
+     ============================================ */
+  @media print {
+    body { background: #fff; }
+    .toolbar, .thumb-strip, .status-bar, .flip-hint, .loading-overlay { display: none !important; }
+    .viewer-area { background: #fff; }
+  }
+
+  /* ============================================
+     RESPONSIVE
+     ============================================ */
+  @media (max-width: 768px) {
+    .toolbar-brand span { display: none; }
+    .tb-label, .view-mode-label { display: none; }
+    .thumb-strip { height: 90px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ==========================================
+     TOOLBAR
+     ========================================== -->
+<div class="toolbar">
+  <div class="toolbar-brand">
+    <div class="logo"></div>
+    <span>ASI Course Viewer</span>
+  </div>
+
+  <!-- Sidebar toggle -->
+  <div class="toolbar-group">
+    <button class="tb-btn active" id="btnSidebar" data-tip="Page strip" onclick="toggleSidebar()">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+    </button>
+  </div>
+
+  <!-- Page navigation -->
+  <div class="toolbar-group page-nav">
+    <button class="tb-btn" id="btnPrev" data-tip="Previous" onclick="prevPage()">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <input type="text" id="pageInput" value="1" onchange="goToPageInput()" onkeydown="if(event.key==='Enter')goToPageInput()">
+    <span>/ <span id="pageTotal">0</span></span>
+    <button class="tb-btn" id="btnNext" data-tip="Next" onclick="nextPage()">
+      <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+  </div>
+
+  <!-- Zoom -->
+  <div class="toolbar-group">
+    <button class="tb-btn" data-tip="Zoom out" onclick="zoomOut()">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+    </button>
+    <span class="tb-label" id="zoomLabel">100%</span>
+    <button class="tb-btn" data-tip="Zoom in" onclick="zoomIn()">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+    </button>
+    <button class="tb-btn" data-tip="Fit to page" onclick="zoomFit()">
+      <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+    </button>
+  </div>
+
+  <div class="toolbar-spacer"></div>
+
+  <!-- View mode -->
+  <div class="toolbar-group">
+    <span class="view-mode-label">View:</span>
+    <button class="tb-btn active" id="btnFlip" data-tip="Flipbook" onclick="setViewMode('flip')">
+      <svg viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+    </button>
+    <button class="tb-btn" id="btnScroll" data-tip="Scroll mode" onclick="setViewMode('scroll')">
+      <svg viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="12" y2="14"/></svg>
+    </button>
+  </div>
+
+  <!-- Spread mode (flip only) -->
+  <div class="toolbar-group" id="spreadGroup">
+    <span class="view-mode-label">Pages:</span>
+    <button class="tb-btn active" id="btnSingle" data-tip="Single page" onclick="setSpreadMode('single')">
+      <svg viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/></svg>
+    </button>
+    <button class="tb-btn" id="btnDual" data-tip="Two-page spread" onclick="setSpreadMode('dual')">
+      <svg viewBox="0 0 24 24"><rect x="2" y="3" width="9" height="18" rx="1"/><rect x="13" y="3" width="9" height="18" rx="1"/></svg>
+    </button>
+  </div>
+
+  <!-- Fullscreen -->
+  <div class="toolbar-group">
+    <button class="tb-btn" data-tip="Fullscreen" onclick="toggleFullscreen()">
+      <svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- ==========================================
+     MAIN CONTENT
+     ========================================== -->
+<div class="main">
+  <!-- Viewer -->
+  <div class="viewer-area" id="viewerArea" oncontextmenu="return false;">
+    <!-- Flipbook mode -->
+    <div id="flipbook-container"></div>
+
+    <!-- Scroll mode -->
+    <div class="scroll-container" id="scrollContainer"></div>
+
+    <!-- Navigation arrows -->
+    <div class="flip-hint prev" id="hintPrev" onclick="prevPage()">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="flip-hint next" id="hintNext" onclick="nextPage()">
+      <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+
+    <!-- Loading overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Loading course notes…</div>
+      <div class="loading-progress" id="loadingProgress"></div>
+    </div>
+  </div>
+
+  <!-- Bottom thumbnail strip -->
+  <div class="thumb-strip" id="thumbStrip">
+    <div class="thumb-scroll" id="thumbContainer"></div>
+  </div>
+</div>
+
+<!-- ==========================================
+     STATUS BAR
+     ========================================== -->
+<div class="status-bar">
+  <span id="statusText">Loading…</span>
+  <div class="watermark-badge" id="watermarkBadge" style="display:none;">Watermark Active</div>
+</div>
+
+
+<script>
+// ============================================================
+//  CONFIGURATION
+// ============================================================
+
+// In production, this would be a URL to your authenticated PDF endpoint:
+//   const PDF_URL = '/api/course-pdf/{courseId}?token=xxx';
+// For the PoC, the PDF is embedded as base64 for self-contained operation.
+const PDF_BASE64 = '__PDF_BASE64_PLACEHOLDER__';
+
+// In production, these credentials come from your Kentico session.
+// The viewer would receive them via:
+//   - URL parameters: ?name=...&email=...&studentId=...
+//   - A JS global set by Kentico before the viewer loads
+//   - An API call to /api/user/credentials using the session cookie
+const USER_CREDENTIALS = {
+  name: 'Jane Smith',
+  email: 'jane.smith@example.com',
+  studentId: 'ASI-2024-00847',
+  timestamp: new Date().toLocaleDateString('en-AU', {
+    day: '2-digit', month: 'short', year: 'numeric'
+  })
+};
+
+// Render scale (1.5 = crisp on most displays)
+const BASE_RENDER_SCALE = 1.5;
+
+// ============================================================
+//  STATE
+// ============================================================
+let pdfDoc = null;
+let pageCanvases = [];       // Pre-rendered canvases (with watermark)
+let pageCount = 0;
+let currentPage = 1;
+let flipBook = null;
+let viewMode = 'flip';       // 'flip' | 'scroll'
+let spreadMode = 'single';  // 'single' | 'dual'
+let zoomLevel = 1.0;
+let pageWidth = 0;
+let pageHeight = 0;
+
+// ============================================================
+//  PDF.js SETUP
+// ============================================================
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ============================================================
+//  WATERMARK ENGINE (fully client-side, no 3rd party)
+// ============================================================
+
+/**
+ * Applies a tiled diagonal watermark to a canvas.
+ * The watermark is composited directly onto the canvas pixels,
+ * making it inseparable from the rendered content.
+ *
+ * @param {HTMLCanvasElement} canvas - Target canvas with rendered PDF page
+ * @param {Object} credentials - User credential data from Kentico
+ * @param {Object} options - Watermark style options
+ */
+function applyWatermark(canvas, credentials, options = {}) {
+  const {
+    opacity    = 0.09,
+    fontSize   = 14,
+    fontFamily = 'Arial, Helvetica, sans-serif',
+    color      = '#445566',
+    angle      = -25,               // degrees
+    lineGapX   = 380,               // horizontal spacing between tiles
+    lineGapY   = 140,               // vertical spacing between tiles
+    showBorder = false               // enable for debug
+  } = options;
+
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+
+  // Scale font with canvas resolution
+  const scale = w / 800;
+  const scaledFont = Math.max(10, Math.round(fontSize * scale));
+  const scaledGapX = lineGapX * scale;
+  const scaledGapY = lineGapY * scale;
+
+  ctx.save();
+
+  // Watermark text lines
+  const line1 = `${credentials.name}  |  ${credentials.email}`;
+  const line2 = `Student ID: ${credentials.studentId}  |  ${credentials.timestamp}`;
+
+  ctx.globalAlpha = opacity;
+  ctx.font = `500 ${scaledFont}px ${fontFamily}`;
+  ctx.fillStyle = color;
+  ctx.textBaseline = 'middle';
+
+  // Rotate entire context
+  const rad = (angle * Math.PI) / 180;
+  ctx.translate(w / 2, h / 2);
+  ctx.rotate(rad);
+
+  // Tile across a region large enough to cover the rotated canvas
+  const diagonal = Math.sqrt(w * w + h * h);
+  const startX = -diagonal;
+  const startY = -diagonal;
+  const endX = diagonal;
+  const endY = diagonal;
+
+  for (let y = startY; y < endY; y += scaledGapY) {
+    for (let x = startX; x < endX; x += scaledGapX) {
+      ctx.fillText(line1, x, y);
+      ctx.fillText(line2, x, y + scaledFont * 1.4);
+    }
+  }
+
+  ctx.restore();
+
+  // Optional: thin border watermark with credentials in footer
+  if (showBorder) {
+    ctx.save();
+    ctx.globalAlpha = 0.15;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1 * scale;
+    ctx.strokeRect(4 * scale, 4 * scale, w - 8 * scale, h - 8 * scale);
+    ctx.restore();
+  }
+}
+
+/**
+ * Enhanced watermark for print output — higher opacity,
+ * plus a footer bar with user credentials.
+ */
+function applyPrintWatermark(canvas, credentials) {
+  // First apply the standard tiled watermark at higher opacity
+  applyWatermark(canvas, credentials, { opacity: 0.18, showBorder: true });
+
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  const scale = w / 800;
+  const barH = 28 * scale;
+
+  // Footer credential bar
+  ctx.save();
+  ctx.globalAlpha = 0.4;
+  ctx.fillStyle = '#1a2744';
+  ctx.fillRect(0, h - barH, w, barH);
+
+  ctx.globalAlpha = 0.7;
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `600 ${11 * scale}px Arial, sans-serif`;
+  ctx.textBaseline = 'middle';
+  const footerText = `Licensed to: ${credentials.name} (${credentials.email}) — ID: ${credentials.studentId} — Printed: ${new Date().toLocaleString('en-AU')}`;
+  ctx.fillText(footerText, 10 * scale, h - barH / 2);
+  ctx.restore();
+}
+
+
+// ============================================================
+//  RENDER PIPELINE: PDF.js → Canvas → Watermark
+// ============================================================
+
+/**
+ * Renders a single PDF page to a new canvas with watermark applied.
+ */
+async function renderPage(pageNum, scale = BASE_RENDER_SCALE) {
+  const page = await pdfDoc.getPage(pageNum);
+  const viewport = page.getViewport({ scale });
+
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+
+  const ctx = canvas.getContext('2d');
+
+  // White background (some PDFs don't fill their own background)
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Render PDF page
+  await page.render({ canvasContext: ctx, viewport }).promise;
+
+  // Composite watermark directly onto the rendered pixels
+  applyWatermark(canvas, USER_CREDENTIALS);
+
+  return canvas;
+}
+
+/**
+ * Renders a thumbnail-sized canvas of a page.
+ */
+async function renderThumbnail(pageNum) {
+  const page = await pdfDoc.getPage(pageNum);
+  const viewport = page.getViewport({ scale: 0.3 });
+
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  return canvas;
+}
+
+
+// ============================================================
+//  FLIPBOOK SETUP (StPageFlip)
+// ============================================================
+
+function destroyFlipbook() {
+  if (flipBook) {
+    try { flipBook.destroy(); } catch(e) { /* already destroyed */ }
+    flipBook = null;
+  }
+  // StPageFlip's destroy() removes the container from the DOM entirely,
+  // so we always need to ensure a fresh container exists.
+  let old = document.getElementById('flipbook-container');
+  const parent = document.getElementById('viewerArea');
+  if (old) {
+    old.remove();
+  }
+  const fresh = document.createElement('div');
+  fresh.id = 'flipbook-container';
+  // Insert before the scroll container
+  const scrollEl = document.getElementById('scrollContainer');
+  parent.insertBefore(fresh, scrollEl);
+}
+
+function initFlipbook() {
+  destroyFlipbook();
+
+  const container = document.getElementById('flipbook-container');
+  if (pageCanvases.length === 0) return;
+
+  // Calculate dimensions to fit the viewer area
+  const viewerArea = document.getElementById('viewerArea');
+  const availW = viewerArea.clientWidth - 60;
+  const availH = viewerArea.clientHeight - 40;
+
+  // Use the first page's aspect ratio
+  const srcW = pageCanvases[0].width;
+  const srcH = pageCanvases[0].height;
+  const aspect = srcW / srcH;
+
+  let pgW, pgH;
+
+  if (spreadMode === 'dual') {
+    // Dual mode: two pages side by side, each gets half the width
+    pgW = Math.floor(availW / 2);
+    pgH = Math.floor(pgW / aspect);
+    if (pgH > availH) {
+      pgH = availH;
+      pgW = Math.floor(pgH * aspect);
+    }
+  } else {
+    // Single mode: one page fills the available space
+    pgW = availW;
+    pgH = Math.floor(pgW / aspect);
+    if (pgH > availH) {
+      pgH = availH;
+      pgW = Math.floor(pgH * aspect);
+    }
+  }
+
+  // Apply zoom
+  pgW = Math.floor(pgW * zoomLevel);
+  pgH = Math.floor(pgH * zoomLevel);
+
+  pageWidth = pgW;
+  pageHeight = pgH;
+
+  // Create page elements
+  const pages = [];
+  for (let i = 0; i < pageCanvases.length; i++) {
+    const div = document.createElement('div');
+    div.className = 'page-canvas-wrapper';
+    div.setAttribute('data-density', 'hard');
+
+    const displayCanvas = document.createElement('canvas');
+    displayCanvas.width = pgW;
+    displayCanvas.height = pgH;
+    const dCtx = displayCanvas.getContext('2d');
+    dCtx.drawImage(pageCanvases[i], 0, 0, pgW, pgH);
+
+    div.appendChild(displayCanvas);
+    pages.push(div);
+  }
+
+  // Init StPageFlip - usePortrait:true for single page mode
+  const isSingle = spreadMode === 'single';
+
+  flipBook = new St.PageFlip(container, {
+    width: pgW,
+    height: pgH,
+    size: 'fixed',
+    minWidth: pgW,
+    maxWidth: pgW,
+    minHeight: pgH,
+    maxHeight: pgH,
+    showCover: true,
+    maxShadowOpacity: 0.35,
+    mobileScrollSupport: false,
+    flippingTime: 600,
+    useMouseEvents: true,
+    swipeDistance: 30,
+    clickEventForward: true,
+    usePortrait: isSingle,
+    startZIndex: 0,
+    autoSize: false,
+    drawShadow: true
+  });
+
+  flipBook.loadFromHTML(pages);
+
+  // Restore current page position
+  if (currentPage > 1) {
+    try { flipBook.flip(currentPage - 1); } catch(e) {}
+  }
+
+  // Track page changes from flip events
+  flipBook.on('flip', (e) => {
+    currentPage = e.data + 1;
+    updatePageUI();
+  });
+
+  updatePageUI();
+}
+
+
+// ============================================================
+//  SCROLL MODE
+// ============================================================
+
+function initScrollMode() {
+  const container = document.getElementById('scrollContainer');
+  container.innerHTML = '';
+
+  const viewerArea = document.getElementById('viewerArea');
+  const availW = viewerArea.clientWidth - 60;
+
+  for (let i = 0; i < pageCanvases.length; i++) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'scroll-page';
+    wrapper.setAttribute('data-page', i + 1);
+
+    const srcW = pageCanvases[i].width;
+    const srcH = pageCanvases[i].height;
+    const aspect = srcW / srcH;
+
+    let dispW = Math.min(availW, 900) * zoomLevel;
+    let dispH = dispW / aspect;
+
+    const displayCanvas = document.createElement('canvas');
+    displayCanvas.width = dispW;
+    displayCanvas.height = dispH;
+    const dCtx = displayCanvas.getContext('2d');
+    dCtx.drawImage(pageCanvases[i], 0, 0, dispW, dispH);
+
+    wrapper.appendChild(displayCanvas);
+    container.appendChild(wrapper);
+  }
+}
+
+
+// ============================================================
+//  THUMBNAIL SIDEBAR
+// ============================================================
+
+async function buildThumbnails() {
+  const container = document.getElementById('thumbContainer');
+  container.innerHTML = '';
+
+  for (let i = 1; i <= pageCount; i++) {
+    const thumbCanvas = await renderThumbnail(i);
+
+    const item = document.createElement('div');
+    item.className = 'thumb-item' + (i === 1 ? ' active' : '');
+    item.setAttribute('data-page', i);
+    item.onclick = () => goToPage(i);
+
+    item.appendChild(thumbCanvas);
+
+    const label = document.createElement('div');
+    label.className = 'thumb-label';
+    label.textContent = i;
+    item.appendChild(label);
+
+    container.appendChild(item);
+  }
+}
+
+
+// ============================================================
+//  NAVIGATION
+// ============================================================
+
+function goToPage(num) {
+  num = Math.max(1, Math.min(pageCount, num));
+  currentPage = num;
+
+  if (viewMode === 'flip' && flipBook) {
+    flipBook.flip(num - 1);
+  } else if (viewMode === 'scroll') {
+    const el = document.querySelector(`.scroll-page[data-page="${num}"]`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  updatePageUI();
+}
+
+function goToPageInput() {
+  const val = parseInt(document.getElementById('pageInput').value, 10);
+  if (!isNaN(val)) goToPage(val);
+}
+
+function prevPage() {
+  if (viewMode === 'flip' && flipBook) {
+    flipBook.flipPrev();
+  } else {
+    goToPage(currentPage - 1);
+  }
+}
+
+function nextPage() {
+  if (viewMode === 'flip' && flipBook) {
+    flipBook.flipNext();
+  } else {
+    goToPage(currentPage + 1);
+  }
+}
+
+function updatePageUI() {
+  document.getElementById('pageInput').value = currentPage;
+  document.getElementById('pageTotal').textContent = pageCount;
+
+  // Update active thumbnail
+  document.querySelectorAll('.thumb-item').forEach(el => {
+    el.classList.toggle('active', parseInt(el.dataset.page) === currentPage);
+  });
+
+  // Scroll active thumb into view
+  const activeTh = document.querySelector('.thumb-item.active');
+  if (activeTh) activeTh.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+
+  // Update status
+  document.getElementById('statusText').textContent =
+    `Page ${currentPage} of ${pageCount}  —  ${USER_CREDENTIALS.name}`;
+}
+
+
+// ============================================================
+//  VIEW MODE
+// ============================================================
+
+function setSpreadMode(mode) {
+  spreadMode = mode;
+  document.getElementById('btnSingle').classList.toggle('active', mode === 'single');
+  document.getElementById('btnDual').classList.toggle('active', mode === 'dual');
+
+  if (viewMode === 'flip') {
+    initFlipbook();
+  }
+}
+
+function setViewMode(mode) {
+  viewMode = mode;
+
+  document.getElementById('btnFlip').classList.toggle('active', mode === 'flip');
+  document.getElementById('btnScroll').classList.toggle('active', mode === 'scroll');
+
+  // Show/hide spread toggle (only relevant in flip mode)
+  document.getElementById('spreadGroup').style.display = mode === 'flip' ? '' : 'none';
+
+  const scrollContainer = document.getElementById('scrollContainer');
+  const hints = document.querySelectorAll('.flip-hint');
+
+  if (mode === 'flip') {
+    scrollContainer.style.display = 'none';
+    hints.forEach(h => h.style.display = '');
+    initFlipbook();
+    document.getElementById('flipbook-container').style.display = '';
+  } else {
+    destroyFlipbook();
+    document.getElementById('flipbook-container').style.display = 'none';
+    scrollContainer.style.display = 'flex';
+    hints.forEach(h => h.style.display = 'none');
+    initScrollMode();
+  }
+}
+
+
+// ============================================================
+//  ZOOM
+// ============================================================
+
+function zoomIn() {
+  zoomLevel = Math.min(2.0, zoomLevel + 0.15);
+  applyZoom();
+}
+
+function zoomOut() {
+  zoomLevel = Math.max(0.5, zoomLevel - 0.15);
+  applyZoom();
+}
+
+function zoomFit() {
+  zoomLevel = 1.0;
+  applyZoom();
+}
+
+function applyZoom() {
+  document.getElementById('zoomLabel').textContent = Math.round(zoomLevel * 100) + '%';
+  if (viewMode === 'flip') {
+    initFlipbook();
+  } else {
+    initScrollMode();
+  }
+}
+
+
+// ============================================================
+//  UI HELPERS
+// ============================================================
+
+function toggleSidebar() {
+  const strip = document.getElementById('thumbStrip');
+  const btn = document.getElementById('btnSidebar');
+  strip.classList.toggle('collapsed');
+  btn.classList.toggle('active');
+
+  // Re-layout after transition
+  setTimeout(() => {
+    if (viewMode === 'flip') {
+      initFlipbook();
+    } else {
+      initScrollMode();
+    }
+  }, 300);
+}
+
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen();
+  }
+}
+
+
+// ============================================================
+//  KEYBOARD SHORTCUTS
+// ============================================================
+
+document.addEventListener('keydown', (e) => {
+  // Block Ctrl+S, Ctrl+P (offer custom print instead)
+  if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'p')) {
+    e.preventDefault();
+    if (e.key === 'p') {
+      alert('Please use the browser print function — watermarks will be applied automatically.');
+    }
+    return;
+  }
+
+  switch (e.key) {
+    case 'ArrowLeft':
+    case 'PageUp':
+      e.preventDefault();
+      prevPage();
+      break;
+    case 'ArrowRight':
+    case 'PageDown':
+    case ' ':
+      e.preventDefault();
+      nextPage();
+      break;
+    case 'Home':
+      e.preventDefault();
+      goToPage(1);
+      break;
+    case 'End':
+      e.preventDefault();
+      goToPage(pageCount);
+      break;
+  }
+});
+
+
+// ============================================================
+//  PRINT INTERCEPTION — Apply enhanced watermark
+// ============================================================
+
+window.addEventListener('beforeprint', () => {
+  // For a production build, you would generate a hidden print-specific
+  // set of canvases with applyPrintWatermark() and inject them into a
+  // print stylesheet. This PoC demonstrates the watermark function exists.
+  console.log('[ASI Viewer] Print event detected — print watermark would be applied.');
+});
+
+
+// ============================================================
+//  INITIALIZATION
+// ============================================================
+
+async function init() {
+  const overlay = document.getElementById('loadingOverlay');
+  const progress = document.getElementById('loadingProgress');
+
+  try {
+    progress.textContent = 'Fetching PDF…';
+
+    // Load the PDF document from embedded base64 data
+    const pdfData = Uint8Array.from(atob(PDF_BASE64), c => c.charCodeAt(0));
+    const loadingTask = pdfjsLib.getDocument({ data: pdfData });
+    pdfDoc = await loadingTask.promise;
+    pageCount = pdfDoc.numPages;
+
+    progress.textContent = `Rendering ${pageCount} pages…`;
+
+    // Pre-render all pages with watermark
+    pageCanvases = [];
+    for (let i = 1; i <= pageCount; i++) {
+      progress.textContent = `Rendering page ${i} of ${pageCount}…`;
+      const canvas = await renderPage(i);
+      pageCanvases.push(canvas);
+    }
+
+    // Build thumbnail strip
+    progress.textContent = 'Building thumbnails…';
+    await buildThumbnails();
+
+    // Start in flip mode
+    setViewMode('flip');
+
+    // Show watermark badge
+    document.getElementById('watermarkBadge').style.display = '';
+
+    // Hide loading overlay
+    overlay.classList.add('hidden');
+    setTimeout(() => overlay.remove(), 500);
+
+    updatePageUI();
+
+  } catch (err) {
+    progress.textContent = `Error: ${err.message}`;
+    console.error('[ASI Viewer] Init error:', err);
+  }
+}
+
+// Resize handler
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (viewMode === 'flip') {
+      initFlipbook();
+    } else {
+      initScrollMode();
+    }
+  }, 250);
+});
+
+// Go
+init();
+</script>
+</body>
+</html>

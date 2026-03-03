@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASI Course Viewer</title>
+
+<!-- Styles -->
+<link rel="stylesheet" href="css/viewer.css">
+</head>
+<body>
+
+<!-- ==========================================
+     TOOLBAR
+     ========================================== -->
+<div class="toolbar">
+  <div class="toolbar-brand">
+    <div class="logo"></div>
+    <span>ASI Course Viewer</span>
+  </div>
+
+  <!-- Sidebar toggle -->
+  <div class="toolbar-group">
+    <button class="tb-btn active" id="btnSidebar" data-tip="Page strip" onclick="ASIViewer.thumbnails.toggleStrip()">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+    </button>
+  </div>
+
+  <!-- Page navigation -->
+  <div class="toolbar-group page-nav">
+    <button class="tb-btn" id="btnPrev" data-tip="Previous" onclick="ASIViewer.navigation.prevPage()">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <input type="text" id="pageInput" value="1" onchange="ASIViewer.navigation.goToPageInput()" onkeydown="if(event.key==='Enter')ASIViewer.navigation.goToPageInput()">
+    <span>/ <span id="pageTotal">0</span></span>
+    <button class="tb-btn" id="btnNext" data-tip="Next" onclick="ASIViewer.navigation.nextPage()">
+      <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+  </div>
+
+  <!-- Zoom -->
+  <div class="toolbar-group">
+    <button class="tb-btn" data-tip="Zoom out" onclick="ASIViewer.navigation.zoomOut()">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+    </button>
+    <span class="tb-label" id="zoomLabel">100%</span>
+    <button class="tb-btn" data-tip="Zoom in" onclick="ASIViewer.navigation.zoomIn()">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+    </button>
+    <button class="tb-btn" data-tip="Fit to page" onclick="ASIViewer.navigation.zoomFit()">
+      <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+    </button>
+  </div>
+
+  <div class="toolbar-spacer"></div>
+
+  <!-- View mode -->
+  <div class="toolbar-group">
+    <span class="view-mode-label">View:</span>
+    <button class="tb-btn active" id="btnFlip" data-tip="Flipbook" onclick="ASIViewer.navigation.setViewMode('flip')">
+      <svg viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+    </button>
+    <button class="tb-btn" id="btnScroll" data-tip="Scroll mode" onclick="ASIViewer.navigation.setViewMode('scroll')">
+      <svg viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="12" y2="14"/></svg>
+    </button>
+  </div>
+
+  <!-- Spread mode (flip only) -->
+  <div class="toolbar-group" id="spreadGroup">
+    <span class="view-mode-label">Pages:</span>
+    <button class="tb-btn active" id="btnSingle" data-tip="Single page" onclick="ASIViewer.navigation.setSpreadMode('single')">
+      <svg viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/></svg>
+    </button>
+    <button class="tb-btn" id="btnDual" data-tip="Two-page spread" onclick="ASIViewer.navigation.setSpreadMode('dual')">
+      <svg viewBox="0 0 24 24"><rect x="2" y="3" width="9" height="18" rx="1"/><rect x="13" y="3" width="9" height="18" rx="1"/></svg>
+    </button>
+  </div>
+
+  <!-- Fullscreen, Print & Settings -->
+  <div class="toolbar-group">
+    <button class="tb-btn" id="btnPrint" data-tip="Print" onclick="ASIViewer.navigation.printDocument()" style="display:none">
+      <svg viewBox="0 0 24 24"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+    </button>
+    <button class="tb-btn" data-tip="Fullscreen" onclick="ASIViewer.navigation.toggleFullscreen()">
+      <svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+    </button>
+    <button class="tb-btn" id="btnSettings" data-tip="Settings" onclick="ASIViewer.settings.toggle()" style="display:none">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- ==========================================
+     MAIN CONTENT
+     ========================================== -->
+<div class="main">
+  <!-- Viewer -->
+  <div class="viewer-area" id="viewerArea">
+    <!-- Flipbook mode -->
+    <div id="flipbook-container"></div>
+
+    <!-- Scroll mode -->
+    <div class="scroll-container" id="scrollContainer"></div>
+
+    <!-- Navigation arrows -->
+    <div class="flip-hint prev" id="hintPrev" onclick="ASIViewer.navigation.prevPage()">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="flip-hint next" id="hintNext" onclick="ASIViewer.navigation.nextPage()">
+      <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+
+    <!-- Loading overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Loading course notes…</div>
+      <div class="loading-progress" id="loadingProgress"></div>
+    </div>
+  </div>
+
+  <!-- Bottom thumbnail strip -->
+  <div class="thumb-strip" id="thumbStrip">
+    <div class="thumb-scroll" id="thumbContainer"></div>
+  </div>
+</div>
+
+<!-- ==========================================
+     STATUS BAR
+     ========================================== -->
+<div class="status-bar">
+  <span id="statusText">Loading…</span>
+  <div class="watermark-badge" id="watermarkBadge" style="display:none;">Watermark Active</div>
+</div>
+
+<!-- ==========================================
+     SETTINGS PANEL (admin only, slides from right)
+     ========================================== -->
+<div class="settings-panel" id="settingsPanel">
+  <div class="settings-header">
+    <span>Viewer Settings</span>
+    <button class="settings-close" onclick="ASIViewer.settings.close()">&times;</button>
+  </div>
+
+  <div class="settings-body">
+    <div class="settings-section">
+      <label class="toggle-row">
+        <span class="toggle-label">Screen watermark</span>
+        <span class="toggle-desc">Tiled watermark on every page</span>
+        <span class="toggle-switch">
+          <input type="checkbox" id="toggleWatermark" checked>
+          <span class="toggle-slider"></span>
+        </span>
+      </label>
+
+      <label class="toggle-row">
+        <span class="toggle-label">Print watermark</span>
+        <span class="toggle-desc">Enhanced watermark + footer on printed pages</span>
+        <span class="toggle-switch">
+          <input type="checkbox" id="togglePrintWatermark" checked>
+          <span class="toggle-slider"></span>
+        </span>
+      </label>
+
+      <label class="toggle-row">
+        <span class="toggle-label">Allow printing</span>
+        <span class="toggle-desc">Print button visibility &amp; Ctrl+P behaviour</span>
+        <span class="toggle-switch">
+          <input type="checkbox" id="toggleAllowPrint" checked>
+          <span class="toggle-slider"></span>
+        </span>
+      </label>
+    </div>
+
+    <div class="settings-divider"></div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">Embed Configuration</div>
+      <code class="settings-config-output" id="configOutput">{}</code>
+      <button class="settings-export-btn" id="btnExportConfig" onclick="ASIViewer.settings.exportConfig()">Export Config</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden print container — populated at print time -->
+<div id="printContainer"></div>
+
+<!-- ==========================================
+     LIBRARIES (local, no CDN)
+     ========================================== -->
+<script src="lib/pdf.min.js"></script>
+<script src="lib/page-flip.browser.js"></script>
+
+<!-- ==========================================
+     APPLICATION MODULES (load order matters)
+     ========================================== -->
+<script src="js/config.js"></script>
+<script src="js/watermark.js"></script>
+<script src="js/pdf-renderer.js"></script>
+<script src="js/content-protection.js"></script>
+<script src="js/thumbnails.js"></script>
+<script src="js/flipbook.js"></script>
+<script src="js/navigation.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/viewer.js"></script>
+
+</body>
+</html>
