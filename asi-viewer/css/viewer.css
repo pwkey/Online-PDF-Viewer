@@ -55,9 +55,8 @@ body {
 }
 
 .toolbar-brand .logo {
-  width: 28px; height: 28px;
-  background: var(--asi-accent);
-  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+  height: 28px;
+  width: auto;
   flex-shrink: 0;
 }
 
