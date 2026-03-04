@@ -282,6 +282,7 @@ body {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  position: relative;
 }
 
 .page-canvas-wrapper canvas {
@@ -439,9 +440,32 @@ body {
   border-radius: 2px;
   overflow: hidden;
   flex-shrink: 0;
+  position: relative;
 }
 
 .scroll-page canvas { display: block; }
+
+/* ============================================
+   ACCESSIBILITY TEXT LAYER
+   ============================================ */
+.textLayer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  opacity: 0;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: none;
+  z-index: 2;
+  line-height: 1;
+}
+
+.textLayer span {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  transform-origin: 0% 0%;
+}
 
 /* ============================================
    PRINT CONTAINER (hidden on screen)

@@ -74,9 +74,44 @@
     return canvas;
   }
 
+  /**
+   * Extracts text content (with positioning) from a PDF page.
+   * @param {PDFDocumentProxy} pdfDoc
+   * @param {number} pageNum
+   * @returns {Promise<TextContent>}
+   */
+  async function getPageTextContent(pdfDoc, pageNum) {
+    var page = await pdfDoc.getPage(pageNum);
+    return page.getTextContent();
+  }
+
+  /**
+   * Renders an invisible text layer over a display canvas for screen reader accessibility.
+   * @param {HTMLElement} container - The .textLayer div to populate
+   * @param {TextContent} textContent - From getPageTextContent()
+   * @param {PDFDocumentProxy} pdfDoc
+   * @param {number} pageNum - 1-based page number
+   * @param {number} displayWidth - Width of the display canvas
+   * @param {number} displayHeight - Height of the display canvas
+   */
+  async function renderTextLayerForPage(container, textContent, pdfDoc, pageNum, displayWidth, displayHeight) {
+    var page = await pdfDoc.getPage(pageNum);
+    var originalViewport = page.getViewport({ scale: 1 });
+    var scale = displayWidth / originalViewport.width;
+    var viewport = page.getViewport({ scale: scale });
+
+    pdfjsLib.renderTextLayer({
+      textContentSource: textContent,
+      container: container,
+      viewport: viewport
+    });
+  }
+
   ASIViewer.renderer = {
     loadDocument: loadDocument,
     renderPage: renderPage,
-    renderThumbnail: renderThumbnail
+    renderThumbnail: renderThumbnail,
+    getPageTextContent: getPageTextContent,
+    renderTextLayerForPage: renderTextLayerForPage
   };
 })();

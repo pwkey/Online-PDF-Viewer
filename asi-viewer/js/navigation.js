@@ -99,6 +99,15 @@
       dCtx.drawImage(state.pageCanvases[i], 0, 0, dispW, dispH);
 
       wrapper.appendChild(displayCanvas);
+
+      // Accessibility text layer
+      var textLayerDiv = document.createElement('div');
+      textLayerDiv.className = 'textLayer';
+      wrapper.appendChild(textLayerDiv);
+      if (state.pageTextContent[i]) {
+        ASIViewer.renderer.renderTextLayerForPage(textLayerDiv, state.pageTextContent[i], state.pdfDoc, i + 1, dispW, dispH);
+      }
+
       container.appendChild(wrapper);
     }
   }

@@ -17,7 +17,8 @@
     spreadMode: 'single',
     zoomLevel: 1.0,
     pageWidth: 0,
-    pageHeight: 0
+    pageHeight: 0,
+    pageTextContent: []
   };
 
   // ---- Init Orchestrator ----
@@ -67,12 +68,14 @@
 
       progress.textContent = 'Rendering ' + state.pageCount + ' pages\u2026';
 
-      // Pre-render all pages with watermark
+      // Pre-render all pages with watermark and extract text content
       state.pageCanvases = [];
+      state.pageTextContent = [];
       for (var i = 1; i <= state.pageCount; i++) {
         progress.textContent = 'Rendering page ' + i + ' of ' + state.pageCount + '\u2026';
         var canvas = await ASIViewer.renderer.renderPage(state.pdfDoc, i);
         state.pageCanvases.push(canvas);
+        state.pageTextContent.push(await ASIViewer.renderer.getPageTextContent(state.pdfDoc, i));
       }
 
       // Build thumbnail strip
