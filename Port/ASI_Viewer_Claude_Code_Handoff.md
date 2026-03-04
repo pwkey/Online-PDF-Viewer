@@ -18,6 +18,7 @@
 10. [Development Phases](#10-development-phases)
 11. [Known Issues & Fixes Applied](#11-known-issues--fixes-applied)
 12. [Content Protection Strategy](#12-content-protection-strategy)
+12a. [Accessibility](#12a-accessibility)
 13. [PDF Characteristics](#13-pdf-characteristics)
 14. [Licensing](#14-licensing)
 15. [Key Contacts & Decision Log](#15-key-contacts--decision-log)
@@ -84,6 +85,7 @@ ASI has a tech consultant who manages the Kentico infrastructure. You'll need to
 |-----------|--------|---------|-----|
 | PDF rendering | **PDF.js v3.11.174** | Apache 2.0 | Industry standard, renders original PDFs client-side, no conversion step |
 | Page-turn animation | **StPageFlip (page-flip) v2.0.7** | MIT | Lightweight, canvas/HTML-based, good touch support |
+| PDF metadata writing | **pdf-lib v1.17.1** | MIT | Embed viewer config in PDF Info dictionary (admin feature) |
 | Watermarking | **Custom canvas compositing** | N/A (our code) | Full ownership, no 3rd party dependency, tiled diagonal text |
 | Framework | **Vanilla JavaScript** | N/A | Matches Kentico integration pattern, no build step required, no framework overhead |
 | Styling | **Plain CSS** | N/A | Self-contained, no preprocessor dependency |
@@ -165,19 +167,22 @@ The watermark is drawn **directly onto the canvas pixels** after PDF.js renders 
 - ✅ Ctrl+S / Ctrl+P interception
 - ✅ Responsive layout
 - ✅ Status bar with user name and watermark indicator
+- ✅ Admin settings panel with live preview (watermark/print toggles, config export)
+- ✅ Embed viewer config in PDF metadata (admin feature, uses pdf-lib)
+- ✅ Admin mode secured — only accessible via server-injected JS global, not URL params
 
 ### What Needs Production Work
 
-- ⬜ Proper PDF.js web worker (currently falls back to main thread — "fake worker" warning)
+- ✅ PDF.js web worker served locally (no "fake worker" warning)
 - ⬜ Kentico credential integration (currently hardcoded `USER_CREDENTIALS` object)
 - ⬜ Authenticated PDF fetching (currently loads from embedded base64 or local file)
-- ⬜ Print watermark implementation (function exists, needs print stylesheet/handler)
+- ✅ Print watermark implementation (enhanced watermark + footer bar on printed pages)
 - ⬜ Error handling and loading states for network failures
 - ⬜ Text search within PDF
 - ⬜ Mobile touch optimisation
 - ⬜ Performance optimisation for large PDFs (lazy rendering, page recycling)
 - ⬜ ASI branding/theming
-- ⬜ Accessibility (keyboard nav exists, needs ARIA labels)
+- ⬜ Accessibility — text layer overlay + ARIA labels (see Section 12a)
 - ⬜ Testing across browsers (Chrome, Firefox, Safari, Edge)
 
 ---
@@ -361,11 +366,9 @@ Kentico page sets globals before loading the viewer:
 <script>
   window.ASI_VIEWER_CONFIG = {
     pdfUrl: '/api/course-pdf/12345?token=abc123',
-    user: {
-      name: 'Jane Smith',
-      email: 'jane.smith@example.com',
-      studentId: 'ASI-2024-00847'
-    }
+    userName: 'Jane Smith',
+    userEmail: 'jane.smith@example.com',
+    studentId: 'ASI-2024-00847'
   };
 </script>
 <script src="/viewer/asi-viewer.js"></script>
@@ -403,6 +406,56 @@ iframe.contentWindow.postMessage({
 }, '*');
 ```
 
+### Admin Mode
+
+Admin mode enables the settings panel (gear icon) for configuring watermark and print options. For security, admin mode **cannot** be activated via URL parameters — it is only available via the JS global:
+
+```html
+<!-- Kentico renders this ONLY for authenticated admin users -->
+<script>
+  window.ASI_VIEWER_CONFIG = {
+    adminMode: true,
+    pdfUrl: '/api/course-pdf/12345?token=abc123',
+    userName: 'Jane Smith',
+    userEmail: 'jane.smith@example.com',
+    studentId: 'ASI-2024-00847'
+  };
+</script>
+```
+
+This ensures regular users cannot discover admin functionality by guessing URL parameters. The server decides who is an admin — the client-side code simply responds to the flag.
+
+### Configuration Priority Chain
+
+Settings are resolved from 6 sources (highest priority first):
+
+| Priority | Source | Scope | Example |
+|----------|--------|-------|---------|
+| 1 | PostMessage from parent frame | Runtime override | Parent iframe sends config dynamically |
+| 2 | URL parameters | Per-session | `?showWatermark=false` |
+| 3 | JS globals (`window.ASI_VIEWER_CONFIG`) | Per-deployment | Kentico injects before viewer loads |
+| 4 | PDF metadata (`ASIViewerConfig` Info key) | Per-document | Config embedded in PDF file itself |
+| 5 | `viewer-config.json` file | Per-deployment | JSON file deployed alongside viewer |
+| 6 | Dev defaults | Built-in | Hardcoded in `config.js` |
+
+### Embedding Config in PDF Metadata
+
+Admins can embed viewer settings (watermark, print) directly into a PDF's metadata. This means settings travel with the file — multiple PDFs with different configs can share one viewer deployment, no separate config file needed.
+
+**How it works:**
+
+1. Open viewer in admin mode
+2. Toggle watermark/print settings as desired
+3. Click **"Embed Config in PDF"** in the settings panel
+4. A modified copy of the PDF downloads with config stored in the `ASIViewerConfig` custom Info dictionary key
+5. Deploy the modified PDF — the viewer reads its metadata on load and applies the settings automatically
+
+**Key points:**
+- The original PDF is never modified — embedding always downloads a new copy
+- PDF metadata config outranks `viewer-config.json` but loses to URL params and JS globals
+- Uses the standard PDF Info dictionary (compatible with all PDF readers)
+- Config is stored as JSON in a `PDFHexString` for safe encoding
+
 ### Coordinate with Tech Consultant
 
 Questions to resolve:
@@ -435,7 +488,8 @@ asi-viewer/
 ├── lib/
 │   ├── pdf.min.js              # PDF.js library (v3.11.174)
 │   ├── pdf.worker.min.js       # PDF.js web worker (serve locally!)
-│   └── page-flip.browser.js    # StPageFlip library (v2.0.7)
+│   ├── page-flip.browser.js    # StPageFlip library (v2.0.7)
+│   └── pdf-lib.min.js          # pdf-lib (v1.17.1) — PDF metadata writing
 ├── assets/
 │   └── icons/                  # Any custom icons or branding
 ├── package.json                # Dependencies for dev tooling
@@ -487,8 +541,8 @@ For production, consider:
 
 ### Phase 2: Enhanced Features (Weeks 4–6)
 
-- [ ] Text search within PDF (PDF.js `getTextContent()`)
-- [ ] Keyboard accessibility and ARIA labels
+- [ ] Invisible text layer overlay via PDF.js `getTextContent()` (accessibility + text selection)
+- [ ] ARIA labels on all controls, screen reader announcements for page changes
 - [ ] Mobile touch gestures (pinch zoom, swipe)
 - [ ] Performance: Lazy page rendering (only render visible + adjacent pages)
 - [ ] Performance: Page canvas recycling for memory management
@@ -549,6 +603,18 @@ For production, consider:
 
 **Important principle**: Browser-based content protection is **deterrence, not prevention**. A determined user with developer tools can always extract content. The goal is to make casual copying difficult and to clearly signal that content is not for redistribution.
 
+### The Raw PDF Question
+
+The browser fetches the PDF behind the scenes to render it. A user who opens the browser's network tab can find the PDF URL and download the raw file (without watermarks). This is inherent to any client-side PDF viewer — FlowPaper's converter avoids this by converting to HTML, but at the cost of font fidelity (which is why we're replacing it).
+
+**Why the watermark is still valuable despite this:**
+
+- Every screenshot, screen recording, and printout from the viewer has the user's name baked in. The moment leaked content is shared visually, it's traceable.
+- Most users won't think to open developer tools. The deterrent works against casual sharing, which is the majority of the risk.
+- For stronger protection, authenticated short-lived PDF URLs can make the raw file link expire quickly (Phase 3 roadmap item). Combined with session validation, this limits the window for raw PDF extraction.
+
+**Bottom line:** The watermark deters the 95% — casual screenshots, printouts, and "send this to a colleague" scenarios. The 5% who know how to use developer tools could extract content regardless of what viewer is used. This trade-off is accepted in exchange for perfect font rendering.
+
 ### Protection Layers
 
 | Layer | What It Does | Difficulty to Bypass |
@@ -567,6 +633,39 @@ For production, consider:
 - **Obfuscation**: Provides false sense of security, wastes dev time
 - **Screenshot prevention**: Not possible in browsers
 - **Aggressive DevTools detection**: Creates cat-and-mouse game, annoys legitimate users
+
+---
+
+## 12a. Accessibility
+
+### The Trade-off: Font Fidelity vs Accessibility
+
+FlowPaper's converter transforms PDF pages into HTML text, which is inherently accessible to screen readers — but this conversion is what causes the font corruption issues ASI is experiencing. Our viewer renders the original PDF onto `<canvas>`, which preserves fonts perfectly but means the content is pixels, not text. Screen readers cannot read canvas pixels.
+
+**This is a known trade-off.** We chose rendering accuracy over out-of-the-box accessibility, with a plan to add accessibility back in.
+
+### The Solution: PDF.js Text Layer
+
+PDF.js provides a `getTextContent()` API that extracts the text and positioning from each PDF page. This can be used to render an invisible text layer (`<div>` elements with transparent text) positioned precisely over the canvas. The result:
+
+- **Visually identical** — users see the canvas rendering (perfect fonts)
+- **Screen reader accessible** — assistive technology reads the invisible text layer
+- **Selectable text** — users can select/copy text if desired (though content protection may restrict this)
+
+This is the same approach used by PDF.js's own demo viewer and is a well-established pattern. It is on the **Phase 2 roadmap** (Weeks 4–6).
+
+### Current Accessibility Features
+
+- Keyboard navigation (arrow keys, page up/down)
+- Focus management for toolbar controls
+- Zoom controls accessible via keyboard
+
+### Still Needed (Phase 2)
+
+- Invisible text layer overlay via `getTextContent()`
+- ARIA labels on all toolbar buttons and controls
+- Screen reader announcements for page changes
+- Focus trapping in settings panel when open
 
 ---
 
@@ -599,6 +698,7 @@ All dependencies are permissively licensed:
 |---------|---------|---------------|---------------|
 | PDF.js | Apache 2.0 | ✅ Yes | ✅ With license notice |
 | StPageFlip (page-flip) | MIT | ✅ Yes | ✅ With license notice |
+| pdf-lib | MIT | ✅ Yes | ✅ With license notice |
 | Custom viewer code | ASI proprietary | N/A | ASI owns |
 
 **Action required**: Include license notices for PDF.js and StPageFlip in the deployed viewer (typically a `LICENSES.txt` file or comments in the bundle).
@@ -618,6 +718,11 @@ All dependencies are permissively licensed:
 | 2026-03-03 | Bottom thumbnail strip, not sidebar | Landscape PDFs need maximum horizontal space for the viewer |
 | 2026-03-03 | Single-page default with dual-page option | Single page fills viewport better; dual spread optional for book feel |
 | 2026-03-03 | Port to Claude Code for production development | Need proper file structure, dev server, iterative testing, git versioning |
+| 2026-03-04 | Embed viewer config in PDF metadata | Settings travel with the file — multiple PDFs with different configs can share one deployment |
+| 2026-03-04 | Remove `?admin=true` URL param — admin mode via JS global only | Prevents users from discovering admin panel by guessing URL parameters |
+| 2026-03-04 | Accept raw PDF exposure trade-off; watermark is deterrence not prevention | Perfect font rendering outweighs raw PDF access risk; short-lived URLs planned for Phase 3 |
+| 2026-03-04 | Accessibility via PDF.js text layer overlay (Phase 2) | Canvas rendering loses screen reader access; invisible text layer adds it back without compromising font fidelity |
+| 2026-03-04 | No Python/Node required in production | Dev server tools are for local development only; production deployment is static HTML/JS/CSS served by IIS |
 
 ### Open Questions for Tech Consultant
 

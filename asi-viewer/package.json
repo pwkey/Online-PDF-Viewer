@@ -8,7 +8,7 @@
     "test": "tests"
   },
   "scripts": {
-    "dev": "npx serve . -p 8080",
+    "dev": "npx http-server . -p 8080 -c-1",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -18,5 +18,10 @@
   "dependencies": {
     "page-flip": "^2.0.7",
     "pdfjs-dist": "^3.11.174"
+  },
+  "devDependencies": {
+    "docx": "^9.6.0",
+    "mammoth": "^1.11.0",
+    "path-is-absolute": "^1.0.1"
   }
 }

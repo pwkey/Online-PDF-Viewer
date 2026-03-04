@@ -1,11 +1,12 @@
 // ============================================================
 //  CONFIG — ASIViewer.config
-//  Resolves configuration from 5 sources (highest priority first):
+//  Resolves configuration from 6 sources (highest priority first):
 //    1. PostMessage from parent frame
 //    2. URL parameters
 //    3. JS globals set before viewer loads
-//    4. viewer-config.json file (deployed alongside viewer)
-//    5. Dev defaults
+//    4. PDF metadata (ASIViewerConfig custom Info key)
+//    5. viewer-config.json file (deployed alongside viewer)
+//    6. Dev defaults
 // ============================================================
 (function () {
   'use strict';
@@ -13,7 +14,11 @@
   window.ASIViewer = window.ASIViewer || {};
 
   // --- Source 3: JS globals (set by Kentico before viewer loads) ---
+  // Check own window first, then parent frame (for iframe embed scenarios)
   var globals = window.ASI_VIEWER_CONFIG || {};
+  if (!window.ASI_VIEWER_CONFIG && window.parent !== window) {
+    try { globals = window.parent.ASI_VIEWER_CONFIG || {}; } catch (e) { /* cross-origin */ }
+  }
 
   // --- Source 2: URL parameters ---
   var params = new URLSearchParams(window.location.search);
@@ -34,7 +39,7 @@
     allowPrint: paramBool('allowPrint', globals.allowPrint !== undefined ? globals.allowPrint : true),
     showWatermark: paramBool('showWatermark', globals.showWatermark !== undefined ? globals.showWatermark : true),
     showPrintWatermark: paramBool('showPrintWatermark', globals.showPrintWatermark !== undefined ? globals.showPrintWatermark : true),
-    adminMode: paramBool('admin', globals.adminMode !== undefined ? globals.adminMode : false),
+    adminMode: globals.adminMode !== undefined ? !!globals.adminMode : false,
     credentials: {
       name: params.get('name') || globals.userName || 'Jane Smith',
       email: params.get('email') || globals.userEmail || 'jane.smith@example.com',
@@ -53,7 +58,7 @@
   };
   config._defaults = DEFAULTS;
 
-  // --- Source 4: Async file config loader ---
+  // --- Source 5: Async file config loader ---
   config.load = async function () {
     try {
       var resp = await fetch('viewer-config.json');
@@ -73,6 +78,29 @@
       }
     } catch (e) {
       // Network error or JSON parse error — silently ignored
+    }
+  };
+
+  // --- Source 4: PDF metadata loader (called after PDF loads) ---
+  config.loadFromPdf = async function (pdfDoc) {
+    try {
+      var meta = await pdfDoc.getMetadata();
+      var raw = meta.info && meta.info.Custom && meta.info.Custom.ASIViewerConfig;
+      if (!raw) return;
+      var pdfConfig = JSON.parse(raw);
+
+      // PDF metadata outranks file config but loses to URL params and globals
+      if (params.get('showWatermark') === null && globals.showWatermark === undefined && pdfConfig.showWatermark !== undefined) {
+        config.showWatermark = !!pdfConfig.showWatermark;
+      }
+      if (params.get('showPrintWatermark') === null && globals.showPrintWatermark === undefined && pdfConfig.showPrintWatermark !== undefined) {
+        config.showPrintWatermark = !!pdfConfig.showPrintWatermark;
+      }
+      if (params.get('allowPrint') === null && globals.allowPrint === undefined && pdfConfig.allowPrint !== undefined) {
+        config.allowPrint = !!pdfConfig.allowPrint;
+      }
+    } catch (e) {
+      // Metadata missing or malformed — silently ignored
     }
   };
 

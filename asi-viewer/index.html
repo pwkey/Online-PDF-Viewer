@@ -177,6 +177,8 @@
       <div class="settings-section-title">Embed Configuration</div>
       <code class="settings-config-output" id="configOutput">{}</code>
       <button class="settings-export-btn" id="btnExportConfig" onclick="ASIViewer.settings.exportConfig()">Export Config</button>
+      <div class="settings-desc" style="margin-top:12px;font-size:11px;opacity:0.7;">Config embedded in PDF metadata travels with the file — no separate config file needed.</div>
+      <button class="settings-export-btn" id="btnEmbedConfig" onclick="ASIViewer.settings.embedConfigInPdf()">Embed Config in PDF</button>
     </div>
   </div>
 </div>
@@ -189,6 +191,7 @@
      ========================================== -->
 <script src="lib/pdf.min.js"></script>
 <script src="lib/page-flip.browser.js"></script>
+<script src="lib/pdf-lib.min.js"></script>
 
 <!-- ==========================================
      APPLICATION MODULES (load order matters)

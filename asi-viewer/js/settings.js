@@ -29,8 +29,11 @@
 
   /**
    * Initialise panel state from current config and wire up listeners.
-   * Called once from viewer.js when adminMode is true.
+   * Safe to call multiple times — listeners are wired only on first call,
+   * subsequent calls just refresh checkbox states.
    */
+  var listenersWired = false;
+
   function initPanel() {
     var config = ASIViewer.config;
 
@@ -43,18 +46,22 @@
     chkPrintWatermark.checked = config.showPrintWatermark;
     chkAllowPrint.checked = config.allowPrint;
 
-    // Wire listeners
-    chkWatermark.addEventListener('change', function () {
-      onWatermarkToggle(this.checked);
-    });
+    // Wire listeners only once
+    if (!listenersWired) {
+      listenersWired = true;
 
-    chkPrintWatermark.addEventListener('change', function () {
-      onPrintWatermarkToggle(this.checked);
-    });
+      chkWatermark.addEventListener('change', function () {
+        onWatermarkToggle(this.checked);
+      });
 
-    chkAllowPrint.addEventListener('change', function () {
-      onPrintToggle(this.checked);
-    });
+      chkPrintWatermark.addEventListener('change', function () {
+        onPrintWatermarkToggle(this.checked);
+      });
+
+      chkAllowPrint.addEventListener('change', function () {
+        onPrintToggle(this.checked);
+      });
+    }
 
     updateConfigOutput();
   }
@@ -133,11 +140,85 @@
     URL.revokeObjectURL(url);
   }
 
+  /**
+   * Embed current non-default config into PDF metadata and trigger download.
+   * Uses pdf-lib to set a custom ASIViewerConfig key in the Info dictionary.
+   */
+  async function embedConfigInPdf() {
+    var config = ASIViewer.config;
+    var defaults = config._defaults;
+
+    // Build non-default config object (same logic as exportConfig)
+    var output = {};
+    if (config.showWatermark !== defaults.showWatermark) {
+      output.showWatermark = config.showWatermark;
+    }
+    if (config.showPrintWatermark !== defaults.showPrintWatermark) {
+      output.showPrintWatermark = config.showPrintWatermark;
+    }
+    if (config.allowPrint !== defaults.allowPrint) {
+      output.allowPrint = config.allowPrint;
+    }
+
+    var jsonStr = JSON.stringify(output);
+
+    try {
+      // Fetch the current PDF as bytes
+      var resp = await fetch(config.pdfUrl);
+      if (!resp.ok) throw new Error('Failed to fetch PDF: ' + resp.status);
+      var bytes = await resp.arrayBuffer();
+
+      // Load with pdf-lib
+      var pdfLibDoc = await PDFLib.PDFDocument.load(bytes);
+
+      // Ensure Info dictionary exists (setProducer creates it if needed)
+      pdfLibDoc.setProducer(pdfLibDoc.getProducer() || 'pdf-lib');
+
+      // Access low-level Info dictionary and set custom key
+      var context = pdfLibDoc.context;
+      var infoRef = context.trailerInfo.Info;
+      var infoDict = context.lookup(infoRef);
+      infoDict.set(
+        PDFLib.PDFName.of('ASIViewerConfig'),
+        PDFLib.PDFHexString.fromText(jsonStr)
+      );
+
+      // Save modified PDF
+      var pdfBytes = await pdfLibDoc.save();
+
+      // Derive filename from URL, add -configured suffix
+      var urlParts = config.pdfUrl.split('/');
+      var filename = urlParts[urlParts.length - 1] || 'document.pdf';
+      filename = filename.split('?')[0];
+      var dotIdx = filename.lastIndexOf('.');
+      if (dotIdx > 0) {
+        filename = filename.substring(0, dotIdx) + '-configured' + filename.substring(dotIdx);
+      } else {
+        filename = filename + '-configured';
+      }
+
+      // Trigger download
+      var blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('[ASI Viewer] Embed config error:', err);
+      alert('Failed to embed config in PDF: ' + err.message);
+    }
+  }
+
   ASIViewer.settings = {
     toggle: toggle,
     open: open,
     close: close,
     initPanel: initPanel,
-    exportConfig: exportConfig
+    exportConfig: exportConfig,
+    embedConfigInPdf: embedConfigInPdf
   };
 })();
