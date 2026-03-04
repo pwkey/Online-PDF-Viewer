@@ -467,6 +467,29 @@ body {
 }
 
 /* ============================================
+   ANNOTATION LAYER (clickable PDF links)
+   ============================================ */
+.annotationLayer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 3;
+}
+
+.annotationLayer a {
+  position: absolute;
+  cursor: pointer;
+  opacity: 0;
+  transition: background-color 0.15s;
+}
+
+.annotationLayer a:hover {
+  opacity: 1;
+  background: rgba(52, 152, 219, 0.15);
+  border-radius: 2px;
+}
+
+/* ============================================
    PRINT CONTAINER (hidden on screen)
    ============================================ */
 #printContainer {

@@ -107,11 +107,111 @@
     });
   }
 
+  /**
+   * Returns raw annotations array from a PDF page.
+   * @param {PDFDocumentProxy} pdfDoc
+   * @param {number} pageNum - 1-based page number
+   * @returns {Promise<Array>}
+   */
+  async function getPageAnnotations(pdfDoc, pageNum) {
+    var page = await pdfDoc.getPage(pageNum);
+    return page.getAnnotations();
+  }
+
+  /**
+   * Resolves a PDF.js destination to a 1-based page number.
+   * @param {PDFDocumentProxy} pdfDoc
+   * @param {string|Array} dest - Named destination string or explicit dest array
+   * @returns {Promise<number|null>} 1-based page number, or null if unresolvable
+   */
+  async function resolveDestToPageNum(pdfDoc, dest) {
+    try {
+      // Named destination (string) — resolve to explicit dest array first
+      if (typeof dest === 'string') {
+        dest = await pdfDoc.getDestination(dest);
+      }
+      if (!Array.isArray(dest) || dest.length === 0) return null;
+
+      // dest[0] is a page reference object — resolve to 0-based index
+      var pageIndex = await pdfDoc.getPageIndex(dest[0]);
+      return pageIndex + 1; // convert to 1-based
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * Renders clickable link overlays for a PDF page's annotations.
+   * Supports both external URL links and internal page links.
+   * @param {HTMLElement} container - The .annotationLayer div to populate
+   * @param {PDFDocumentProxy} pdfDoc
+   * @param {number} pageNum - 1-based page number
+   * @param {number} displayWidth - Width of the display canvas
+   * @param {number} displayHeight - Height of the display canvas
+   */
+  async function renderAnnotationLayer(container, pdfDoc, pageNum, displayWidth, displayHeight) {
+    var page = await pdfDoc.getPage(pageNum);
+    var viewport = page.getViewport({ scale: 1 });
+    var scale = displayWidth / viewport.width;
+
+    var annotations = await page.getAnnotations();
+
+    for (var i = 0; i < annotations.length; i++) {
+      var annot = annotations[i];
+      if (annot.subtype !== 'Link') continue;
+
+      // Determine if this is an external URL or internal destination
+      var url = annot.url || annot.unsafeUrl || null;
+      var dest = annot.dest || null;
+
+      // Skip annotations with neither a URL nor a destination
+      if (!url && !dest) continue;
+
+      var rect = annot.rect;
+      var left = rect[0] * scale;
+      var top = displayHeight - (rect[3] * scale);
+      var width = (rect[2] - rect[0]) * scale;
+      var height = (rect[3] - rect[1]) * scale;
+
+      var a = document.createElement('a');
+      a.className = 'annotation-link';
+      a.style.left = left + 'px';
+      a.style.top = top + 'px';
+      a.style.width = width + 'px';
+      a.style.height = height + 'px';
+
+      if (url) {
+        // External link — open in new tab
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+      } else {
+        // Internal link — navigate within the viewer
+        a.href = '#';
+        (function (linkDest) {
+          a.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            resolveDestToPageNum(pdfDoc, linkDest).then(function (targetPage) {
+              if (targetPage) {
+                ASIViewer.navigation.goToPage(targetPage);
+              }
+            });
+          });
+        })(dest);
+      }
+
+      container.appendChild(a);
+    }
+  }
+
   ASIViewer.renderer = {
     loadDocument: loadDocument,
     renderPage: renderPage,
     renderThumbnail: renderThumbnail,
     getPageTextContent: getPageTextContent,
-    renderTextLayerForPage: renderTextLayerForPage
+    renderTextLayerForPage: renderTextLayerForPage,
+    getPageAnnotations: getPageAnnotations,
+    renderAnnotationLayer: renderAnnotationLayer
   };
 })();

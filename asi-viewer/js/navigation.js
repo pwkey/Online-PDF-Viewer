@@ -108,6 +108,12 @@
         ASIViewer.renderer.renderTextLayerForPage(textLayerDiv, state.pageTextContent[i], state.pdfDoc, i + 1, dispW, dispH);
       }
 
+      // Annotation layer (clickable links)
+      var annotDiv = document.createElement('div');
+      annotDiv.className = 'annotationLayer';
+      wrapper.appendChild(annotDiv);
+      ASIViewer.renderer.renderAnnotationLayer(annotDiv, state.pdfDoc, i + 1, dispW, dispH);
+
       container.appendChild(wrapper);
     }
   }
