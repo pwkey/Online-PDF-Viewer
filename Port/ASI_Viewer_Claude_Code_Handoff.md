@@ -170,6 +170,7 @@ The watermark is drawn **directly onto the canvas pixels** after PDF.js renders 
 - ✅ Admin settings panel with live preview (watermark/print toggles, config export)
 - ✅ Embed viewer config in PDF metadata (admin feature, uses pdf-lib)
 - ✅ Admin mode secured — only accessible via server-injected JS global, not URL params
+- ✅ Clickable PDF link annotations — external URLs (open in new tab) and internal page links (navigate within viewer)
 
 ### What Needs Production Work
 
@@ -182,7 +183,9 @@ The watermark is drawn **directly onto the canvas pixels** after PDF.js renders 
 - ⬜ Mobile touch optimisation
 - ⬜ Performance optimisation for large PDFs (lazy rendering, page recycling)
 - ⬜ ASI branding/theming
-- ⬜ Accessibility — text layer overlay + ARIA labels (see Section 12a)
+- ✅ Accessibility — text layer overlay (see Section 12a)
+- ✅ PDF link annotations — clickable hyperlinks overlaid on canvas (external + internal)
+- ⬜ Accessibility — ARIA labels on all controls (see Section 12a)
 - ⬜ Testing across browsers (Chrome, Firefox, Safari, Edge)
 
 ---
@@ -541,7 +544,8 @@ For production, consider:
 
 ### Phase 2: Enhanced Features (Weeks 4–6)
 
-- [ ] Invisible text layer overlay via PDF.js `getTextContent()` (accessibility + text selection)
+- [x] Invisible text layer overlay via PDF.js `getTextContent()` (accessibility + text selection)
+- [x] Clickable link annotation layer for external URLs and internal page navigation
 - [ ] ARIA labels on all controls, screen reader announcements for page changes
 - [ ] Mobile touch gestures (pinch zoom, swipe)
 - [ ] Performance: Lazy page rendering (only render visible + adjacent pages)
@@ -659,10 +663,11 @@ This is the same approach used by PDF.js's own demo viewer and is a well-establi
 - Keyboard navigation (arrow keys, page up/down)
 - Focus management for toolbar controls
 - Zoom controls accessible via keyboard
+- Invisible text layer overlay via `getTextContent()` — screen readers can read page content
+- Clickable link annotation layer — PDF hyperlinks (external URLs and internal page links) are interactive
 
-### Still Needed (Phase 2)
+### Still Needed
 
-- Invisible text layer overlay via `getTextContent()`
 - ARIA labels on all toolbar buttons and controls
 - Screen reader announcements for page changes
 - Focus trapping in settings panel when open
@@ -723,6 +728,7 @@ All dependencies are permissively licensed:
 | 2026-03-04 | Accept raw PDF exposure trade-off; watermark is deterrence not prevention | Perfect font rendering outweighs raw PDF access risk; short-lived URLs planned for Phase 3 |
 | 2026-03-04 | Accessibility via PDF.js text layer overlay (Phase 2) | Canvas rendering loses screen reader access; invisible text layer adds it back without compromising font fidelity |
 | 2026-03-04 | No Python/Node required in production | Dev server tools are for local development only; production deployment is static HTML/JS/CSS served by IIS |
+| 2026-03-04 | Clickable PDF link annotations via annotation layer | Overlay transparent `<a>` elements over canvas for Link annotations; supports external URLs (new tab) and internal GoTo destinations (in-viewer navigation) |
 
 ### Open Questions for Tech Consultant
 
