@@ -26,6 +26,14 @@
     var config = ASIViewer.config;
     var overlay = document.getElementById('loadingOverlay');
     var progress = document.getElementById('loadingProgress');
+    var loadingText = overlay.querySelector('.loading-text');
+
+    // Reset state if retrying
+    overlay.classList.remove('hidden', 'error');
+    if (loadingText) loadingText.textContent = 'Loading\u2026';
+    progress.textContent = '';
+    var oldBtn = overlay.querySelector('.loading-retry-btn');
+    if (oldBtn) oldBtn.remove();
 
     // Load config file (viewer-config.json) before anything else
     await config.load();
@@ -45,6 +53,17 @@
       // Load PDF document from URL (not base64)
       state.pdfDoc = await ASIViewer.renderer.loadDocument(config.pdfUrl);
       state.pageCount = state.pdfDoc.numPages;
+
+      // Load config embedded in PDF metadata (outranks viewer-config.json)
+      await config.loadFromPdf(state.pdfDoc);
+
+      // Refresh print button visibility (PDF metadata may have changed allowPrint)
+      document.getElementById('btnPrint').style.display = config.allowPrint ? '' : 'none';
+
+      // Refresh settings panel if admin (toggles may show stale values)
+      if (config.adminMode) {
+        ASIViewer.settings.initPanel();
+      }
 
       progress.textContent = 'Rendering ' + state.pageCount + ' pages\u2026';
 
@@ -78,8 +97,16 @@
       ASIViewer.navigation.updatePageUI();
 
     } catch (err) {
-      progress.textContent = 'Error: ' + err.message;
       console.error('[ASI Viewer] Init error:', err);
+      overlay.classList.add('error');
+      if (loadingText) loadingText.textContent = 'Failed to load PDF';
+      progress.textContent = err.message || 'Unknown error';
+
+      var retryBtn = document.createElement('button');
+      retryBtn.className = 'loading-retry-btn';
+      retryBtn.textContent = 'Retry';
+      retryBtn.addEventListener('click', function () { init(); });
+      overlay.appendChild(retryBtn);
     }
   }
 

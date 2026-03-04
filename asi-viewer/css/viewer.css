@@ -380,6 +380,25 @@ body {
 .loading-text { color: #5a7a94; font-size: 13px; }
 .loading-progress { color: #3d6a8f; font-size: 11px; margin-top: 6px; }
 
+/* Error state */
+.loading-overlay.error .loading-spinner { display: none; }
+.loading-overlay.error .loading-text { color: #e74c3c; font-size: 15px; font-weight: 600; }
+.loading-overlay.error .loading-progress { color: #5a7a94; font-size: 12px; margin-top: 8px; }
+
+.loading-retry-btn {
+  margin-top: 20px;
+  padding: 10px 28px;
+  background: var(--asi-accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.loading-retry-btn:hover { background: #2980b9; }
+
 /* ============================================
    CONTEXT MENU BLOCKER
    ============================================ */
