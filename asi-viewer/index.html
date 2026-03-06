@@ -20,6 +20,14 @@
     <span>ASI Course Viewer</span>
   </div>
 
+  <!-- Open file -->
+  <div class="toolbar-group">
+    <button class="tb-btn" id="btnOpen" data-tip="Open PDF" onclick="document.getElementById('fileInput').click()">
+      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+    </button>
+    <input type="file" id="fileInput" accept=".pdf" style="display:none" onchange="ASIViewer.viewer.loadFromFile(this)">
+  </div>
+
   <!-- Sidebar toggle -->
   <div class="toolbar-group">
     <button class="tb-btn active" id="btnSidebar" data-tip="Page strip" onclick="ASIViewer.thumbnails.toggleStrip()">
@@ -50,6 +58,13 @@
     </button>
     <button class="tb-btn" data-tip="Fit to page" onclick="ASIViewer.navigation.zoomFit()">
       <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+    </button>
+  </div>
+
+  <!-- Search -->
+  <div class="toolbar-group">
+    <button class="tb-btn" id="btnSearch" data-tip="Find" onclick="ASIViewer.search.toggle()">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
     </button>
   </div>
 
@@ -184,6 +199,20 @@
   </div>
 </div>
 
+<!-- ==========================================
+     SEARCH PANEL (slides from right)
+     ========================================== -->
+<div class="search-panel" id="searchPanel">
+  <div class="search-header">
+    <input type="text" class="search-input" id="searchInput" placeholder="Find in document...">
+    <span class="search-count" id="searchCount"></span>
+    <button class="tb-btn" onclick="ASIViewer.search.prevResult()">&#9650;</button>
+    <button class="tb-btn" onclick="ASIViewer.search.nextResult()">&#9660;</button>
+    <button class="settings-close" onclick="ASIViewer.search.close()">&times;</button>
+  </div>
+  <div class="search-results" id="searchResults"></div>
+</div>
+
 <!-- Hidden print container — populated at print time -->
 <div id="printContainer"></div>
 
@@ -204,8 +233,36 @@
 <script src="js/thumbnails.js"></script>
 <script src="js/flipbook.js"></script>
 <script src="js/navigation.js"></script>
+<script src="js/search.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/viewer.js"></script>
+
+<!-- Toolbar tooltips (body-appended to avoid toolbar overflow clipping) -->
+<script>
+(function () {
+  var tip = document.createElement('div');
+  tip.className = 'toolbar-tooltip';
+  document.body.appendChild(tip);
+  var hideTimer;
+
+  document.addEventListener('mouseenter', function (e) {
+    var btn = e.target.closest('[data-tip]');
+    if (!btn) return;
+    clearTimeout(hideTimer);
+    tip.textContent = btn.getAttribute('data-tip');
+    tip.style.opacity = '1';
+    var r = btn.getBoundingClientRect();
+    tip.style.left = r.left + r.width / 2 - tip.offsetWidth / 2 + 'px';
+    tip.style.top = r.bottom + 6 + 'px';
+  }, true);
+
+  document.addEventListener('mouseleave', function (e) {
+    var btn = e.target.closest('[data-tip]');
+    if (!btn) return;
+    hideTimer = setTimeout(function () { tip.style.opacity = '0'; }, 50);
+  }, true);
+})();
+</script>
 
 </body>
 </html>
