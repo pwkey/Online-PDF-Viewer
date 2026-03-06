@@ -143,25 +143,22 @@ body {
   white-space: nowrap;
 }
 
-/* Tooltip */
-.tb-btn[data-tip]::after {
-  content: attr(data-tip);
-  position: absolute;
-  bottom: -30px;
-  left: 50%;
-  transform: translateX(-50%);
+/* Tooltip (positioned by JS, appended to body) */
+.toolbar-tooltip {
+  position: fixed;
   background: #0d1b2a;
   color: #b0c4d8;
-  padding: 3px 8px;
+  padding: 5px 10px;
   border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.12);
   font-size: 11px;
   white-space: nowrap;
-  opacity: 0;
   pointer-events: none;
+  z-index: 9999;
+  opacity: 0;
   transition: opacity 0.15s;
-  z-index: 200;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
 }
-.tb-btn[data-tip]:hover::after { opacity: 1; }
 
 /* ============================================
    MAIN LAYOUT
@@ -239,6 +236,13 @@ body {
   text-align: center;
   padding: 1px 0;
   backdrop-filter: blur(4px);
+}
+
+.thumb-placeholder {
+  display: block;
+  background: #e8ecf0;
+  border-radius: 2px;
+  width: 100%;
 }
 
 /* ============================================
@@ -508,7 +512,7 @@ body {
     padding: 0 !important;
   }
 
-  .toolbar, .main, .status-bar, .flip-hint, .loading-overlay, .settings-panel { display: none !important; }
+  .toolbar, .main, .status-bar, .flip-hint, .loading-overlay, .settings-panel, .search-panel { display: none !important; }
 
   #printContainer {
     display: block !important;
@@ -713,6 +717,131 @@ body {
 
 .settings-export-btn:hover {
   background: #2980b9;
+}
+
+/* ============================================
+   SEARCH PANEL
+   ============================================ */
+.search-panel {
+  position: fixed;
+  top: var(--toolbar-h);
+  right: 0;
+  bottom: 0;
+  width: 360px;
+  background: var(--asi-navy);
+  border-left: 1px solid rgba(255,255,255,0.1);
+  z-index: 101;
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 20px rgba(0,0,0,0.3);
+}
+
+.search-panel.open {
+  transform: translateX(0);
+}
+
+.search-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  color: #e0e8f0;
+  padding: 7px 10px;
+  font-size: 13px;
+  outline: none;
+  font-family: inherit;
+}
+
+.search-input:focus {
+  border-color: var(--asi-accent);
+  box-shadow: 0 0 0 2px rgba(52,152,219,0.25);
+}
+
+.search-count {
+  font-size: 11px;
+  color: #6888a5;
+  white-space: nowrap;
+  padding: 0 4px;
+}
+
+.search-results {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.search-results::-webkit-scrollbar { width: 5px; }
+.search-results::-webkit-scrollbar-track { background: transparent; }
+.search-results::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+
+.search-result-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.12s;
+}
+
+.search-result-item:hover {
+  background: rgba(255,255,255,0.05);
+}
+
+.search-result-item.active {
+  background: rgba(52,152,219,0.15);
+  border-left: 3px solid var(--asi-accent);
+}
+
+.search-result-page {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--asi-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.search-result-snippet {
+  font-size: 12px;
+  color: #8ea8c2;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.search-match {
+  background: rgba(52,152,219,0.25);
+  color: #fff;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+/* ============================================
+   SEARCH HIGHLIGHT OVERLAY (on-page)
+   ============================================ */
+.searchHighlightLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.search-highlight {
+  position: absolute;
+  background: rgba(255, 213, 0, 0.35);
+  border: 1px solid rgba(255, 180, 0, 0.6);
+  border-radius: 2px;
+  mix-blend-mode: multiply;
 }
 
 /* ============================================

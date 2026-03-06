@@ -10,6 +10,10 @@
   // Set up PDF.js worker from config (local file, no CDN)
   pdfjsLib.GlobalWorkerOptions.workerSrc = ASIViewer.config.workerSrc;
 
+  // Dedup map: prevents double-rendering when background pool and on-demand
+  // navigation both request the same page concurrently.
+  var renderingInProgress = {};
+
   /**
    * Loads a PDF document from a URL.
    * @param {string} url - URL to the PDF file
@@ -99,6 +103,9 @@
     var originalViewport = page.getViewport({ scale: 1 });
     var scale = displayWidth / originalViewport.width;
     var viewport = page.getViewport({ scale: scale });
+
+    // PDF.js requires --scale-factor CSS variable on the text layer container
+    container.style.setProperty('--scale-factor', scale);
 
     pdfjsLib.renderTextLayer({
       textContentSource: textContent,
@@ -205,6 +212,28 @@
     }
   }
 
+  /**
+   * Ensures a page is rendered exactly once. Returns the cached canvas if
+   * already rendered, or shares an in-flight Promise if rendering is in
+   * progress, or kicks off a new render.
+   * @param {PDFDocumentProxy} pdfDoc
+   * @param {number} pageNum - 1-based page number
+   * @returns {Promise<HTMLCanvasElement>}
+   */
+  async function ensurePageRendered(pdfDoc, pageNum) {
+    var state = ASIViewer.state;
+    if (state.pageCanvases[pageNum - 1]) return state.pageCanvases[pageNum - 1];
+    if (renderingInProgress[pageNum]) return renderingInProgress[pageNum];
+
+    var promise = renderPage(pdfDoc, pageNum).then(function (canvas) {
+      state.pageCanvases[pageNum - 1] = canvas;
+      delete renderingInProgress[pageNum];
+      return canvas;
+    });
+    renderingInProgress[pageNum] = promise;
+    return promise;
+  }
+
   ASIViewer.renderer = {
     loadDocument: loadDocument,
     renderPage: renderPage,
@@ -212,6 +241,7 @@
     getPageTextContent: getPageTextContent,
     renderTextLayerForPage: renderTextLayerForPage,
     getPageAnnotations: getPageAnnotations,
-    renderAnnotationLayer: renderAnnotationLayer
+    renderAnnotationLayer: renderAnnotationLayer,
+    ensurePageRendered: ensurePageRendered
   };
 })();

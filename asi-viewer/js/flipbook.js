@@ -1,6 +1,7 @@
 // ============================================================
 //  FLIPBOOK — ASIViewer.flipbook
 //  StPageFlip destroy/recreate cycle, initFlipbook()
+//  Sparse-tolerant: handles null canvases with placeholders
 // ============================================================
 (function () {
   'use strict';
@@ -28,21 +29,41 @@
     parent.insertBefore(fresh, scrollEl);
   }
 
+  /**
+   * Draws a light gray placeholder with "Page N" text onto a canvas.
+   */
+  function drawPlaceholder(canvas, pageNum, width, height) {
+    canvas.width = width;
+    canvas.height = height;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#e8ecf0';
+    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = '#a0aeb8';
+    ctx.font = '16px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Page ' + pageNum, width / 2, height / 2);
+  }
+
   function initFlipbook() {
     destroyFlipbook();
 
     var state = ASIViewer.state;
     var container = document.getElementById('flipbook-container');
-    if (state.pageCanvases.length === 0) return;
+    if (state.pageCount === 0) return;
 
     // Calculate dimensions to fit the viewer area
     var viewerArea = document.getElementById('viewerArea');
     var availW = viewerArea.clientWidth - 60;
     var availH = viewerArea.clientHeight - 40;
 
-    // Use the first page's aspect ratio
-    var srcW = state.pageCanvases[0].width;
-    var srcH = state.pageCanvases[0].height;
+    // Use the first available page's aspect ratio, or default 8.5x11
+    var firstCanvas = null;
+    for (var f = 0; f < state.pageCount; f++) {
+      if (state.pageCanvases[f]) { firstCanvas = state.pageCanvases[f]; break; }
+    }
+    var srcW = firstCanvas ? firstCanvas.width : 850;
+    var srcH = firstCanvas ? firstCanvas.height : 1100;
     var aspect = srcW / srcH;
 
     var pgW, pgH;
@@ -72,22 +93,30 @@
     state.pageWidth = pgW;
     state.pageHeight = pgH;
 
-    // Create page elements
+    // Create page elements — use pageCount, not pageCanvases.length
     var pages = [];
-    for (var i = 0; i < state.pageCanvases.length; i++) {
+    for (var i = 0; i < state.pageCount; i++) {
       var div = document.createElement('div');
       div.className = 'page-canvas-wrapper';
       div.setAttribute('data-density', 'hard');
+      div.setAttribute('data-page', i + 1);
 
       var displayCanvas = document.createElement('canvas');
-      displayCanvas.width = pgW;
-      displayCanvas.height = pgH;
-      var dCtx = displayCanvas.getContext('2d');
-      dCtx.drawImage(state.pageCanvases[i], 0, 0, pgW, pgH);
+
+      if (state.pageCanvases[i]) {
+        // Real canvas available — draw it
+        displayCanvas.width = pgW;
+        displayCanvas.height = pgH;
+        var dCtx = displayCanvas.getContext('2d');
+        dCtx.drawImage(state.pageCanvases[i], 0, 0, pgW, pgH);
+      } else {
+        // Not yet rendered — draw placeholder
+        drawPlaceholder(displayCanvas, i + 1, pgW, pgH);
+      }
 
       div.appendChild(displayCanvas);
 
-      // Accessibility text layer
+      // Accessibility text layer — only if text content exists
       var textLayerDiv = document.createElement('div');
       textLayerDiv.className = 'textLayer';
       div.appendChild(textLayerDiv);
@@ -148,6 +177,38 @@
   }
 
   /**
+   * Updates a single page in the flipbook after its canvas becomes available.
+   * Finds the wrapper by data-page, redraws its display canvas, and adds the
+   * text layer if available and not already present.
+   * @param {number} pageNum - 1-based page number
+   */
+  function updateFlipbookPage(pageNum) {
+    var state = ASIViewer.state;
+    var canvas = state.pageCanvases[pageNum - 1];
+    if (!canvas) return;
+
+    var wrapper = document.querySelector('.page-canvas-wrapper[data-page="' + pageNum + '"]');
+    if (!wrapper) return;
+
+    // Redraw display canvas
+    var displayCanvas = wrapper.querySelector('canvas');
+    if (displayCanvas) {
+      var dCtx = displayCanvas.getContext('2d');
+      dCtx.clearRect(0, 0, displayCanvas.width, displayCanvas.height);
+      dCtx.drawImage(canvas, 0, 0, displayCanvas.width, displayCanvas.height);
+    }
+
+    // Add text layer if available and not already populated
+    var textLayer = wrapper.querySelector('.textLayer');
+    if (textLayer && state.pageTextContent[pageNum - 1] && textLayer.childNodes.length === 0) {
+      ASIViewer.renderer.renderTextLayerForPage(
+        textLayer, state.pageTextContent[pageNum - 1], state.pdfDoc, pageNum,
+        displayCanvas.width, displayCanvas.height
+      );
+    }
+  }
+
+  /**
    * Attaches a mousemove listener to the .stf__wrapper element that toggles
    * flip-cursor-prev / flip-cursor-next classes based on which click-zone
    * the pointer is in. Zone logic mirrors StPageFlip internals:
@@ -188,6 +249,7 @@
   ASIViewer.flipbook = {
     destroyFlipbook: destroyFlipbook,
     initFlipbook: initFlipbook,
+    updateFlipbookPage: updateFlipbookPage,
     getFlipBook: getFlipBook
   };
 })();

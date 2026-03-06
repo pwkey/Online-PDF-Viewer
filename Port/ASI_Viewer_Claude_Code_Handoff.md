@@ -181,7 +181,7 @@ The watermark is drawn **directly onto the canvas pixels** after PDF.js renders 
 - ⬜ Error handling and loading states for network failures
 - ⬜ Text search within PDF
 - ⬜ Mobile touch optimisation
-- ⬜ Performance optimisation for large PDFs (lazy rendering, page recycling)
+- ✅ Performance optimisation for large PDFs (progressive loading, lazy rendering, concurrent render pool)
 - ⬜ ASI branding/theming
 - ✅ Accessibility — text layer overlay (see Section 12a)
 - ✅ PDF link annotations — clickable hyperlinks overlaid on canvas (external + internal)
@@ -480,14 +480,16 @@ asi-viewer/
 ├── css/
 │   └── viewer.css              # All styles
 ├── js/
-│   ├── viewer.js               # Main application controller
-│   ├── pdf-renderer.js         # PDF.js loading and page rendering
+│   ├── viewer.js               # Main controller — progressive init(), renderPool(), background text extraction
+│   ├── pdf-renderer.js         # PDF.js loading, renderPage(), ensurePageRendered() with dedup map
 │   ├── watermark.js            # Watermark engine (applyWatermark, applyPrintWatermark)
-│   ├── flipbook.js             # StPageFlip wrapper (init, destroy, mode switching)
-│   ├── thumbnails.js           # Thumbnail strip management
-│   ├── navigation.js           # Page nav, keyboard shortcuts, zoom
+│   ├── flipbook.js             # StPageFlip wrapper — sparse-tolerant, updateFlipbookPage(), data-page attrs
+│   ├── thumbnails.js           # Lazy thumbnail strip — IntersectionObserver, placeholder divs
+│   ├── navigation.js           # Page nav, lazy scroll mode (IntersectionObserver), async print, zoom
+│   ├── search.js               # Find-in-document with partial-search indicator
+│   ├── settings.js             # Admin settings panel with live preview
 │   ├── content-protection.js   # Right-click, print intercept, copy prevention
-│   └── config.js               # Configuration and credential handling
+│   └── config.js               # Configuration and credential handling (6-source priority chain)
 ├── lib/
 │   ├── pdf.min.js              # PDF.js library (v3.11.174)
 │   ├── pdf.worker.min.js       # PDF.js web worker (serve locally!)
@@ -548,7 +550,8 @@ For production, consider:
 - [x] Clickable link annotation layer for external URLs and internal page navigation
 - [ ] ARIA labels on all controls, screen reader announcements for page changes
 - [ ] Mobile touch gestures (pinch zoom, swipe)
-- [ ] Performance: Lazy page rendering (only render visible + adjacent pages)
+- [x] Performance: Progressive loading — render page 1 fast, show UI, lazy-render rest with concurrent pool (3 workers)
+- [x] Performance: IntersectionObserver for lazy scroll-mode and thumbnail rendering
 - [ ] Performance: Page canvas recycling for memory management
 - [ ] Deep linking (URL hash for page number)
 - [ ] ASI branding pass (colours, logo, fonts)
@@ -688,8 +691,7 @@ ASI course notes share common characteristics:
 
 ### Implications for Development
 
-- **Progressive loading not critical**: Documents are small enough to load entirely upfront
-- **Page pre-rendering is feasible**: Can render all pages at init without performance issues
+- **Progressive loading implemented**: Viewer renders page 1 first, shows the UI immediately, then lazily renders remaining pages in the background with a concurrent pool (3 workers). IntersectionObserver lazily loads thumbnails and scroll-mode pages on demand.
 - **Landscape orientation**: Bottom thumbnail strip (not sidebar) is the correct UX choice
 - **No conversion needed**: PDF.js handles these files natively — this is the core advantage over FlowPaper
 
@@ -729,6 +731,8 @@ All dependencies are permissively licensed:
 | 2026-03-04 | Accessibility via PDF.js text layer overlay (Phase 2) | Canvas rendering loses screen reader access; invisible text layer adds it back without compromising font fidelity |
 | 2026-03-04 | No Python/Node required in production | Dev server tools are for local development only; production deployment is static HTML/JS/CSS served by IIS |
 | 2026-03-04 | Clickable PDF link annotations via annotation layer | Overlay transparent `<a>` elements over canvas for Link annotations; supports external URLs (new tab) and internal GoTo destinations (in-viewer navigation) |
+| 2026-03-06 | Progressive loading with concurrent render pool | Render page 1 fast → show UI → background pool (3 concurrent) fills rest. IntersectionObserver for scroll-mode and thumbnails. Eliminates 8-12s initial load for large PDFs |
+| 2026-03-06 | PDF.js --scale-factor CSS variable fix | Set `--scale-factor` on text layer containers to match viewport scale, fixing PDF.js console errors |
 
 ### Open Questions for Tech Consultant
 

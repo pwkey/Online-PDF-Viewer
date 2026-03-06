@@ -1,5 +1,8 @@
 const http = require('http');
 
+const PORT = process.argv[2] || 8080;
+const BASE = 'http://localhost:' + PORT;
+
 function fetch(url) {
   return new Promise((resolve, reject) => {
     http.get(url, (res) => {
@@ -22,19 +25,21 @@ async function run() {
     else { console.log('  FAIL: ' + label); fail++; }
   }
 
-  console.log('\n=== ASI Viewer Production Port — Verification ===\n');
+  console.log('\n=== ASI Viewer — Verification (port ' + PORT + ') ===\n');
 
   // 1. Fetch index.html
-  const html = await fetch('http://localhost:8080/');
+  const html = await fetch(BASE + '/');
 
-  // Script load order
+  // Script load order (img src also matches, so filter to .js only)
   console.log('--- Script Load Order ---');
-  const scripts = [...html.matchAll(/src="([^"]+)"/g)].map(m => m[1]);
+  const allSrcs = [...html.matchAll(/src="([^"]+)"/g)].map(m => m[1]);
+  const scripts = allSrcs.filter(s => s.endsWith('.js'));
   scripts.forEach((s, i) => console.log('  ' + (i + 1) + '. ' + s));
 
   const expected = [
     'lib/pdf.min.js',
     'lib/page-flip.browser.js',
+    'lib/pdf-lib.min.js',
     'js/config.js',
     'js/watermark.js',
     'js/pdf-renderer.js',
@@ -42,10 +47,12 @@ async function run() {
     'js/thumbnails.js',
     'js/flipbook.js',
     'js/navigation.js',
+    'js/search.js',
+    'js/settings.js',
     'js/viewer.js'
   ];
 
-  check('Script order correct (10 scripts)', scripts.length === 10 && scripts.every((s, i) => s === expected[i]));
+  check('Script order correct (' + expected.length + ' scripts)', scripts.length === expected.length && scripts.every((s, i) => s === expected[i]));
 
   // No CDN references
   const hasCDN = html.includes('cdnjs.cloudflare.com') || html.includes('cdn.jsdelivr');
@@ -54,10 +61,11 @@ async function run() {
   // No inline oncontextmenu
   check('No inline oncontextmenu', html.includes('oncontextmenu') === false);
 
-  // All onclick handlers use ASIViewer namespace
+  // All onclick handlers use ASIViewer namespace (except the file-input trigger which uses document.getElementById)
   const onclicks = [...html.matchAll(/onclick="([^"]+)"/g)].map(m => m[1]);
-  const allNamespaced = onclicks.every(h => h.includes('ASIViewer.'));
-  check('All ' + onclicks.length + ' onclick handlers use ASIViewer.*', allNamespaced);
+  const nonNamespaced = onclicks.filter(h => !h.includes('ASIViewer.'));
+  const allOk = nonNamespaced.every(h => h.includes("document.getElementById('fileInput')"));
+  check('All ' + onclicks.length + ' onclick handlers use ASIViewer.* (1 known exception: fileInput trigger)', allOk);
 
   // No base64 loading
   check('No base64 placeholder or atob()', html.includes('PDF_BASE64') === false && html.includes('atob(') === false);
@@ -68,36 +76,39 @@ async function run() {
   // 2. Verify JS modules contain correct namespace
   console.log('\n--- Module Namespace Checks ---');
 
-  const configJs = await fetch('http://localhost:8080/js/config.js');
+  const configJs = await fetch(BASE + '/js/config.js');
   check('config.js creates ASIViewer.config', configJs.includes('ASIViewer.config ='));
 
-  const watermarkJs = await fetch('http://localhost:8080/js/watermark.js');
+  const watermarkJs = await fetch(BASE + '/js/watermark.js');
   check('watermark.js creates ASIViewer.watermark', watermarkJs.includes('ASIViewer.watermark ='));
 
-  const rendererJs = await fetch('http://localhost:8080/js/pdf-renderer.js');
+  const rendererJs = await fetch(BASE + '/js/pdf-renderer.js');
   check('pdf-renderer.js creates ASIViewer.renderer', rendererJs.includes('ASIViewer.renderer ='));
   check('pdf-renderer.js uses local worker path', rendererJs.includes('ASIViewer.config.workerSrc') && rendererJs.includes('cdnjs') === false);
 
-  const flipbookJs = await fetch('http://localhost:8080/js/flipbook.js');
+  const flipbookJs = await fetch(BASE + '/js/flipbook.js');
   check('flipbook.js creates ASIViewer.flipbook', flipbookJs.includes('ASIViewer.flipbook ='));
 
-  const thumbnailsJs = await fetch('http://localhost:8080/js/thumbnails.js');
+  const thumbnailsJs = await fetch(BASE + '/js/thumbnails.js');
   check('thumbnails.js creates ASIViewer.thumbnails', thumbnailsJs.includes('ASIViewer.thumbnails ='));
 
-  const navigationJs = await fetch('http://localhost:8080/js/navigation.js');
+  const navigationJs = await fetch(BASE + '/js/navigation.js');
   check('navigation.js creates ASIViewer.navigation', navigationJs.includes('ASIViewer.navigation ='));
 
-  const protectionJs = await fetch('http://localhost:8080/js/content-protection.js');
+  const protectionJs = await fetch(BASE + '/js/content-protection.js');
   check('content-protection.js creates ASIViewer.protection', protectionJs.includes('ASIViewer.protection ='));
 
-  const viewerJs = await fetch('http://localhost:8080/js/viewer.js');
+  const searchJs = await fetch(BASE + '/js/search.js');
+  check('search.js creates ASIViewer.search', searchJs.includes('ASIViewer.search ='));
+
+  const viewerJs = await fetch(BASE + '/js/viewer.js');
   check('viewer.js creates ASIViewer.state', viewerJs.includes('ASIViewer.state ='));
 
   // 3. Verify PDF is loadable from URL
   console.log('\n--- Asset Availability ---');
 
   const pdfCheck = await new Promise((resolve) => {
-    http.get('http://localhost:8080/tests/test-pdfs/Knowledge-Series-Module-1.pdf', (res) => {
+    http.get(BASE + '/tests/test-pdfs/Knowledge-Series-Module-1.pdf', (res) => {
       resolve({ status: res.statusCode, size: parseInt(res.headers['content-length'] || '0') });
       res.destroy();
     });
@@ -105,7 +116,7 @@ async function run() {
   check('Test PDF responds (status ' + pdfCheck.status + ', ' + Math.round(pdfCheck.size / 1024) + ' KB)', pdfCheck.status === 200 && pdfCheck.size > 100000);
 
   const workerCheck = await new Promise((resolve) => {
-    http.get('http://localhost:8080/lib/pdf.worker.min.js', (res) => {
+    http.get(BASE + '/lib/pdf.worker.min.js', (res) => {
       resolve({ status: res.statusCode, size: parseInt(res.headers['content-length'] || '0') });
       res.destroy();
     });
@@ -128,6 +139,35 @@ async function run() {
   check('Content protection blocks Ctrl+S and Ctrl+P', protectionJs.includes("e.key === 's'") && protectionJs.includes("e.key === 'p'"));
   check('Viewer has resize handler with debounce', viewerJs.includes('resizeTimer') && viewerJs.includes('setTimeout'));
   check('PDF loaded via URL (not base64)', viewerJs.includes('loadDocument') && viewerJs.includes('atob') === false);
+
+  // 6. Progressive loading checks
+  console.log('\n--- Progressive Loading ---');
+  check('pdf-renderer.js has ensurePageRendered()', rendererJs.includes('ensurePageRendered'));
+  check('pdf-renderer.js has renderingInProgress dedup map', rendererJs.includes('renderingInProgress'));
+  check('pdf-renderer.js exports ensurePageRendered', rendererJs.includes('ensurePageRendered: ensurePageRendered'));
+  check('pdf-renderer.js sets --scale-factor on text layer', rendererJs.includes('--scale-factor'));
+  check('viewer.js has renderPool()', viewerJs.includes('function renderPool'));
+  check('viewer.js has extractAllTextInBackground()', viewerJs.includes('extractAllTextInBackground'));
+  check('viewer.js has textExtractionDone state', viewerJs.includes('textExtractionDone'));
+  check('viewer.js uses sparse arrays', viewerJs.includes('new Array(state.pageCount).fill(null)'));
+  check('viewer.js renders page 1 first', viewerJs.includes('Rendering page 1'));
+  check('viewer.js reRenderPages uses pool', viewerJs.includes('await renderPool(allPages, 3)'));
+  check('flipbook.js has data-page attribute', flipbookJs.includes("data-page"));
+  check('flipbook.js has drawPlaceholder()', flipbookJs.includes('drawPlaceholder'));
+  check('flipbook.js has updateFlipbookPage()', flipbookJs.includes('updateFlipbookPage'));
+  check('flipbook.js uses pageCount for loop bounds', flipbookJs.includes('i < state.pageCount'));
+  check('navigation.js has IntersectionObserver', navigationJs.includes('IntersectionObserver'));
+  check('navigation.js has updateScrollPage()', navigationJs.includes('updateScrollPage'));
+  check('navigation.js has onPageRendered()', navigationJs.includes('onPageRendered'));
+  check('navigation.js goToPage calls ensurePageRendered', navigationJs.includes('ensurePageRendered'));
+  check('navigation.js printDocument is async', navigationJs.includes('async function printDocument'));
+  check('thumbnails.js has IntersectionObserver', thumbnailsJs.includes('IntersectionObserver'));
+  check('thumbnails.js has thumb-placeholder', thumbnailsJs.includes('thumb-placeholder'));
+  check('thumbnails.js renders page 1 immediately', thumbnailsJs.includes('renderThumbnail(pdfDoc, 1)'));
+  check('search.js has partial-search indicator', searchJs.includes('searched') && searchJs.includes('pages)'));
+
+  const css = await fetch(BASE + '/css/viewer.css');
+  check('viewer.css has .thumb-placeholder style', css.includes('.thumb-placeholder'));
 
   // Summary
   console.log('\n=== RESULTS: ' + pass + ' passed, ' + fail + ' failed ===\n');
